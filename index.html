@@ -24,12 +24,17 @@
     .nasa-img { width: 100%; border-radius: 6px; margin: 10px 0;
                 max-height: 400px; object-fit: cover; display: none; }
     #earth-container { width: 100%; height: 380px; border-radius: 8px;
-                       overflow: hidden; background: #000; margin-bottom: 10px;
-                       cursor: grab; }
+                       overflow: hidden; background: #000; margin-bottom: 10px; cursor: grab; }
     #earth-container:active { cursor: grabbing; }
     .iss-coords { text-align: center; font-size: 0.8em; color: #888; margin-top: 6px; }
     .iss-status { text-align: center; font-size: 1em; color: #00ff88; margin-top: 4px; }
     .iss-extra  { text-align: center; font-size: 0.75em; color: #555; margin-top: 4px; }
+    .news-item { padding: 10px 0; border-bottom: 1px solid #1a1a1a; }
+    .news-item:last-child { border-bottom: none; }
+    .news-title a { color: #00ff88; text-decoration: none; font-size: 0.95em; line-height: 1.5; }
+    .news-title a:hover { text-decoration: underline; }
+    .news-source { font-size: 0.75em; color: #555; margin-top: 3px; }
+    #dowChart { display: block; width: 100%; }
   </style>
 </head>
 <body>
@@ -57,7 +62,7 @@
   <div class="card">
     <h2>Weather - Inman, SC</h2>
     <div class="value" id="w-temp">--&deg;F</div>
-    <div class="sub" id="w-desc">Loading...</div>
+    <div class="sub" id="w-desc">Connect to ESP32 to load...</div>
     <div class="sub" style="margin-top:4px;">Inman, South Carolina</div>
   </div>
 
@@ -69,27 +74,63 @@
 
   <div class="card">
     <h2>Dad Joke</h2>
-    <div class="sub" id="joke" style="font-size:1em;color:#ccc;line-height:1.6;">Loading...</div>
+    <div class="sub" id="joke" style="font-size:1em;color:#ccc;line-height:1.6;">Connect to ESP32 to load...</div>
+  </div>
+
+  <div style="display:grid;grid-template-rows:1fr 1fr;gap:16px;">
+    <div class="card">
+      <h2>Word of the Day</h2>
+      <div class="value" id="word" style="font-size:1.1em;text-transform:capitalize;">--</div>
+      <div class="sub" id="worddef">Connect to ESP32 to load...</div>
+    </div>
+    <div class="card">
+      <h2>Fun Fact of the Day</h2>
+      <div class="sub" id="funfact" style="font-size:0.9em;color:#ccc;line-height:1.7;">Connect to ESP32 to load...</div>
+    </div>
   </div>
 
   <div class="card">
-    <h2>Word of the Day</h2>
-    <div class="value" id="word" style="font-size:1.1em;text-transform:capitalize;">--</div>
-    <div class="sub" id="worddef">Loading...</div>
+    <h2>Moon Phase</h2>
+    <canvas id="moonCanvas" width="120" height="120" style="display:block;margin:0 auto 10px;"></canvas>
+    <div class="value" id="moon-phase" style="text-align:center;font-size:1em;">--</div>
+    <div class="sub" style="text-align:center;" id="moon-illum">Connect to ESP32 to load...</div>
+  </div>
+
+  <div class="card">
+    <h2>Next Holiday</h2>
+    <div class="value" id="holiday-name" style="font-size:1em;color:#fff;margin-bottom:8px;">--</div>
+    <div class="time-big" id="holiday-days" style="font-size:2.5em;">--</div>
+    <div class="time-tz">days away</div>
+    <div class="sub" id="holiday-date" style="margin-top:6px;">Connect to ESP32 to load...</div>
+  </div>
+
+  <div class="card" style="grid-column:1/-1;">
+    <h2>Latest News Headlines</h2>
+    <div id="news-list"><div class="sub">Connect to ESP32 to load...</div></div>
+  </div>
+
+  <div class="card" style="grid-column:1/-1;">
+    <h2>Dow Jones — Today <span id="dow-change" style="font-size:0.9em;margin-left:10px;"></span></h2>
+    <div id="dow-price" style="font-size:1.8em;color:#fff;font-weight:bold;margin-bottom:12px;">--</div>
+    <canvas id="dowChart"></canvas>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;">
+      <span class="sub" id="dow-low"></span>
+      <span class="sub" id="dow-time-label" style="color:#333;">connect to load</span>
+      <span class="sub" id="dow-high"></span>
+    </div>
   </div>
 
   <div class="card" style="grid-column:1/-1;">
     <h2>ISS Tracker — Live Position <span style="color:#555;font-size:0.8em;">(drag to rotate)</span></h2>
     <div id="earth-container"></div>
     <div class="iss-coords" id="iss-coords">Lat: -- &nbsp; Lon: --</div>
-    <div class="iss-extra"  id="iss-extra">Alt: -- km &nbsp; Speed: -- km/h</div>
-    <div class="iss-status" id="iss-status">Loading...</div>
-
+    <div class="iss-extra"  id="iss-extra"></div>
+    <div class="iss-status" id="iss-status">Connect to ESP32 to load...</div>
   </div>
 
   <div class="card" style="grid-column:1/-1;">
     <h2>NASA Photo of the Day</h2>
-    <div class="value" id="nasa-title" style="font-size:1em;margin-bottom:8px;">Loading...</div>
+    <div class="value" id="nasa-title" style="font-size:1em;margin-bottom:8px;">Connect to ESP32 to load...</div>
     <img id="nasa-img" class="nasa-img">
     <div class="sub" id="nasa-desc"></div>
   </div>
@@ -99,368 +140,550 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js"></script>
 <script>
 
-// ── Word list ─────────────────────────────────────────────────────
-const words = ["ephemeral","luminous","serendipity","resilient","cascade",
-  "eloquent","solitude","wanderlust","zenith","whimsical",
-  "tenacious","opulent","reverie","jubilant","melancholy",
-  "tranquil","vivid","nostalgia","profound","enigmatic",
-  "fervent","serene","audacious","quaint","sublime",
-  "pensive","radiant","fleeting","stoic","blithe","curious"];
-const defs = ["Short-lived","Full of light","Finding good things by chance",
-  "Bounces back quickly","Series of events",
-  "Speaks persuasively","Peaceful alone time","Desire to travel",
-  "The highest point","Playfully fanciful",
-  "Very determined","Rich and luxurious","Dreamy meditation",
-  "Great happiness","Sadness with no cause",
-  "Calm and peaceful","Vivid mental images","Longing for the past",
-  "Deep meaning","Mysterious",
-  "Intense passion","Calm and untroubled","Boldly daring",
-  "Charming old-fashioned","Great beauty",
-  "Deep in thought","Shining brightly","Passing swiftly",
-  "Endures pain quietly","Happily carefree","Eager to learn"];
+// ═══════════════════════════════════════════════════════════════════
+// ── PASTE YOUR API KEYS HERE ───────────────────────────────────────
+const FINNHUB_KEY = 'd6slut1r01qtlmfofsjgd6slut1r01qtlmfofsk0';
+const NASA_KEY    = '231FzeCLIvuxAuxCmQ030YbGs0bkDFizf04nLytL';
+// ═══════════════════════════════════════════════════════════════════
 
-const dayIdx = new Date().getDate() - 1;
-document.getElementById('word').textContent    = words[dayIdx];
-document.getElementById('worddef').textContent = defs[dayIdx];
-
-// ── SC Time 12-hour ───────────────────────────────────────────────
-function updateSCTime() {
-  const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const sc  = new Date(utc + (-4 * 60 * 60000));
-  let h = sc.getHours();
-  const m = sc.getMinutes(), s = sc.getSeconds();
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12; if (h === 0) h = 12;
-  const pad = n => String(n).padStart(2,'0');
-  document.getElementById('t-time').textContent = h + ':' + pad(m) + ':' + pad(s);
-  document.getElementById('t-ampm').textContent = ampm;
-  const days   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const months = ['January','February','March','April','May','June',
-                  'July','August','September','October','November','December'];
-  document.getElementById('t-date').textContent =
-    days[sc.getDay()] + ', ' + months[sc.getMonth()] +
-    ' ' + sc.getDate() + ', ' + sc.getFullYear();
-}
-updateSCTime();
-setInterval(updateSCTime, 1000);
-
-// ── Weather — Inman SC ────────────────────────────────────────────
-fetch('https://api.open-meteo.com/v1/forecast?latitude=35.0468&longitude=-82.0874&current_weather=true&temperature_unit=fahrenheit')
-  .then(r=>r.json()).then(d=>{
-    document.getElementById('w-temp').innerHTML = Math.round(d.current_weather.temperature) + '&deg;F';
-    const wc = d.current_weather.weathercode;
-    const descs = [[0,'Clear sky'],[1,'Mainly clear'],[2,'Partly cloudy'],[3,'Overcast'],
-      [45,'Foggy'],[51,'Drizzle'],[61,'Rainy'],[71,'Snowy'],[80,'Rain showers'],[95,'Thunderstorm']];
-    let desc = 'Cloudy';
-    for (const [k,v] of descs) { if (wc >= k) desc = v; }
-    document.getElementById('w-desc').textContent = desc;
-  }).catch(()=>{ document.getElementById('w-desc').textContent = 'Unavailable'; });
-
-// ── Bitcoin ───────────────────────────────────────────────────────
-fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
-  .then(r=>r.json()).then(d=>{
-    document.getElementById('btc').textContent = '$' + Math.round(d.bitcoin.usd).toLocaleString();
-  }).catch(()=>{ document.getElementById('btc').textContent = '$--'; });
-
-// ── Dad Joke ──────────────────────────────────────────────────────
-fetch('https://icanhazdadjoke.com/', {headers:{'Accept':'application/json'}})
-  .then(r=>r.json()).then(d=>{
-    document.getElementById('joke').textContent = d.joke;
-  }).catch(()=>{ document.getElementById('joke').textContent = 'Could not load joke'; });
-
-// ── NASA APOD ─────────────────────────────────────────────────────
-fetch('https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY')
-  .then(r=>r.json()).then(d=>{
-    document.getElementById('nasa-title').textContent = d.title;
-    document.getElementById('nasa-desc').textContent  = d.explanation.substring(0,200) + '...';
-    if (d.media_type === 'image') {
-      var img = document.getElementById('nasa-img');
-      img.src = d.url; img.style.display = 'block';
-    }
-  }).catch(()=>{ document.getElementById('nasa-title').textContent = 'NASA unavailable'; });
-
-// ── ISS ───────────────────────────────────────────────────────────
-var currentIssLat = 0, currentIssLon = 0;
-
-function fetchISS() {
-  fetch('https://api.wheretheiss.at/v1/satellites/25544')
-    .then(r=>r.json()).then(d=>{
-      currentIssLat = parseFloat(d.latitude);
-      currentIssLon = parseFloat(d.longitude);
-      document.getElementById('iss-coords').textContent =
-        'Lat: ' + currentIssLat.toFixed(2) + '  Lon: ' + currentIssLon.toFixed(2);
-      document.getElementById('iss-extra').textContent =
-        'Alt: ' + Math.round(d.altitude) + ' km  ' +
-        'Speed: ' + Math.round(d.velocity).toLocaleString() + ' km/h  ' +
-        d.visibility;
-      var overhead = currentIssLat > 32 && currentIssLat < 35.2 &&
-                     currentIssLon > -83.4 && currentIssLon < -78.5;
-      document.getElementById('iss-status').textContent =
-        overhead ? 'ISS is overhead South Carolina!' : 'Not currently overhead SC';
-      updateISS(currentIssLat, currentIssLon);
-    }).catch(()=>{ document.getElementById('iss-status').textContent = 'ISS data unavailable'; });
-}
-fetchISS();
-setInterval(fetchISS, 5000);
-
-// ── BLE ───────────────────────────────────────────────────────────
 const SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
 const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
-let device, characteristic, currentLine = '';
 
-async function connect() {
-  try {
-    document.getElementById('connectBtn').textContent = 'Scanning...';
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{name:'ESP32-Dashboard'}],
-      optionalServices: [SERVICE_UUID]
-    });
-    device.addEventListener('gattserverdisconnected', onDisconnected);
-    const server  = await device.gatt.connect();
-    const service = await server.getPrimaryService(SERVICE_UUID);
-    characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-    await characteristic.startNotifications();
-    characteristic.addEventListener('characteristicvaluechanged', onData);
-    document.getElementById('dot').classList.add('on');
-    document.getElementById('connectBtn').disabled    = true;
-    document.getElementById('disconnectBtn').disabled = false;
-    document.getElementById('connectBtn').textContent = 'Connect to ESP32';
-  } catch(e) {
-    document.getElementById('connectBtn').textContent = 'Connect to ESP32';
-    alert('Connection failed: ' + e);
+// ── Word list ─────────────────────────────────────────────────────
+const words = ["ephemeral","luminous","serendipity","resilient","cascade",
+  "eloquent","solitude","wanderlust","zenith","whimsical","tenacious","opulent",
+  "reverie","jubilant","melancholy","tranquil","vivid","nostalgia","profound",
+  "enigmatic","fervent","serene","audacious","quaint","sublime","pensive",
+  "radiant","fleeting","stoic","blithe","curious"];
+const defs = ["Short-lived","Full of light","Finding good things by chance",
+  "Bounces back quickly","Series of events","Speaks persuasively",
+  "Peaceful alone time","Desire to travel","The highest point","Playfully fanciful",
+  "Very determined","Rich and luxurious","Dreamy meditation","Great happiness",
+  "Sadness with no cause","Calm and peaceful","Vivid mental images",
+  "Longing for the past","Deep meaning","Mysterious","Intense passion",
+  "Calm and untroubled","Boldly daring","Charming old-fashioned","Great beauty",
+  "Deep in thought","Shining brightly","Passing swiftly","Endures pain quietly",
+  "Happily carefree","Eager to learn"];
+
+const facts = ["Honey never spoils — archaeologists found 3000-year-old honey in Egyptian tombs still edible.",
+  "A group of flamingos is called a flamboyance.",
+  "The shortest war in history lasted 38 minutes — between Britain and Zanzibar in 1896.",
+  "Octopuses have three hearts, blue blood, and nine brains.",
+  "The Eiffel Tower grows 6 inches taller in summer due to thermal expansion.",
+  "A day on Venus is longer than a year on Venus.",
+  "Bananas are berries, but strawberries are not.",
+  "The average person walks about 100,000 miles in their lifetime.",
+  "Cleopatra lived closer in time to the Moon landing than to the Great Pyramid.",
+  "There are more possible chess games than atoms in the observable universe.",
+  "Wombats produce cube-shaped poop — the only animal known to do so.",
+  "A bolt of lightning is five times hotter than the surface of the Sun.",
+  "The inventor of the Pringles can was buried in one.",
+  "Scotland's national animal is the unicorn.",
+  "Crows can recognize and remember human faces.",
+  "The longest word typable with only the left hand is stewardesses.",
+  "A snail can sleep for three years.",
+  "The human nose can detect over 1 trillion different smells.",
+  "Sharks are older than trees — they've existed for over 400 million years.",
+  "The dot over the letter i is called a tittle.",
+  "Sea otters hold hands while sleeping so they don't drift apart.",
+  "Oxford University is older than the Aztec Empire.",
+  "There are more stars in the universe than grains of sand on all Earth's beaches.",
+  "A group of owls is called a parliament.",
+  "Penguins propose to their mates with a pebble.",
+  "The average cloud weighs about 1.1 million pounds.",
+  "Humans share 60% of their DNA with bananas.",
+  "Bubble wrap was originally invented as wallpaper.",
+  "A small child could swim through the veins of a blue whale.",
+  "The inventor of the frisbee was turned into a frisbee after he died.",
+  "Polar bears are left-handed."];
+
+// ── SC Time — always runs ─────────────────────────────────────────
+function updateSCTime() {
+  const now=new Date(),utc=now.getTime()+now.getTimezoneOffset()*60000;
+  const sc=new Date(utc+(-4*60*60000));
+  let h=sc.getHours();const m=sc.getMinutes(),s=sc.getSeconds();
+  const ampm=h>=12?'PM':'AM';h=h%12;if(h===0)h=12;
+  const pad=n=>String(n).padStart(2,'0');
+  document.getElementById('t-time').textContent=h+':'+pad(m)+':'+pad(s);
+  document.getElementById('t-ampm').textContent=ampm;
+  const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months=['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  document.getElementById('t-date').textContent=
+    days[sc.getDay()]+', '+months[sc.getMonth()]+' '+sc.getDate()+', '+sc.getFullYear();
+}
+updateSCTime();
+setInterval(updateSCTime,1000);
+
+// ── Moon Phase helpers ────────────────────────────────────────────
+function getMoonPhase(){
+  const now=new Date();
+  var y=now.getFullYear(),mo=now.getMonth()+1,d=now.getDate();
+  var r=y%100,s=y-r,g=(s/100)%4,e=((s/100)|0);
+  var ii=((e-15)/2|0)+(((e-17)/25|0));
+  var f=e-ii+((g-1)/4|0)-4;
+  var h=r+(r/4|0)+f+6+mo*4.37+d;
+  var age=((h%29.53058867)+29.53058867)%29.53058867;
+  var illum=Math.round((1-Math.cos(age/29.53058867*2*Math.PI))/2*100);
+  var phases=[[0,'New Moon'],[3.7,'Waxing Crescent'],[7.4,'First Quarter'],
+    [11.1,'Waxing Gibbous'],[14.8,'Full Moon'],[18.5,'Waning Gibbous'],
+    [22.1,'Last Quarter'],[25.8,'Waning Crescent'],[29.5,'New Moon']];
+  var name='New Moon';
+  for(var j=phases.length-1;j>=0;j--){if(age>=phases[j][0]){name=phases[j][1];break;}}
+  document.getElementById('moon-phase').textContent=name;
+  document.getElementById('moon-illum').textContent=illum+'% illuminated';
+  drawMoon(age);
+}
+function drawMoon(age){
+  var canvas=document.getElementById('moonCanvas');
+  var ctx=canvas.getContext('2d'),cx=60,cy=60,r=50;
+  ctx.clearRect(0,0,120,120);
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle='#1a1a2e';ctx.fill();
+  var phase=age/29.53058867;
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.clip();
+  ctx.fillStyle='#1a1a2e';ctx.fillRect(cx-r,cy-r,r*2,r*2);
+  ctx.fillStyle='#e8e0c8';
+  if(phase<0.5){
+    ctx.beginPath();ctx.arc(cx,cy,r,Math.PI/2,-Math.PI/2,true);
+    var xs=Math.cos(phase*2*Math.PI);
+    ctx.bezierCurveTo(cx+xs*r,cy-r,cx+xs*r,cy+r,cx,cy+r);ctx.fill();
+  }else{
+    ctx.beginPath();ctx.arc(cx,cy,r,Math.PI/2,-Math.PI/2,false);
+    var xs2=Math.cos(phase*2*Math.PI);
+    ctx.bezierCurveTo(cx+xs2*r,cy-r,cx+xs2*r,cy+r,cx,cy+r);ctx.fill();
   }
+  ctx.restore();
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();
 }
 
-function onData(e) {
-  const chunk = new TextDecoder().decode(e.target.value);
-  if (chunk === '\n') { processLine(currentLine.trim()); currentLine = ''; }
-  else currentLine += chunk;
+// ── Holiday helpers ───────────────────────────────────────────────
+function getEaster(y){
+  var a=y%19,b=y>>2,c=(b/25|0)+1,d=(c*3>>2),e=((a*19-((c*8+5)/25|0)+d+15)%30);
+  e+=(29578-a-e*32>>10)-(y%7+b-e+d+2)%7+114;
+  return new Date(y,(e>>5)-1,e&31);
+}
+function getMemorialDay(y){var d=new Date(y,4,31);d.setDate(31-d.getDay());return d;}
+function getLaborDay(y){var d=new Date(y,8,1);d.setDate(1+(7-d.getDay())%7);return d;}
+function getThanksgiving(y){var d=new Date(y,10,1);d.setDate(1+(4-d.getDay()+7)%7+21);return d;}
+function getNextHoliday(){
+  const now=new Date(),y=now.getFullYear();
+  const holidays=[
+    {name:"New Year's Day",date:new Date(y,0,1)},
+    {name:"Valentine's Day",date:new Date(y,1,14)},
+    {name:"St. Patrick's Day",date:new Date(y,2,17)},
+    {name:"Easter",date:getEaster(y)},
+    {name:"Memorial Day",date:getMemorialDay(y)},
+    {name:"Independence Day",date:new Date(y,6,4)},
+    {name:"Labor Day",date:getLaborDay(y)},
+    {name:"Halloween",date:new Date(y,9,31)},
+    {name:"Thanksgiving",date:getThanksgiving(y)},
+    {name:"Christmas",date:new Date(y,11,25)},
+    {name:"New Year's Day",date:new Date(y+1,0,1)},
+  ];
+  var next=null;
+  for(var i=0;i<holidays.length;i++){if(holidays[i].date>now){next=holidays[i];break;}}
+  if(!next)return;
+  var days=Math.ceil((next.date-now)/(1000*60*60*24));
+  var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('holiday-name').textContent=next.name;
+  document.getElementById('holiday-days').textContent=days;
+  document.getElementById('holiday-date').textContent=
+    mo[next.date.getMonth()]+' '+next.date.getDate()+', '+next.date.getFullYear();
 }
 
-function processLine(line) {
-  if (line.startsWith('TIME:')) {
-    document.getElementById('uptime').textContent = line.substring(5);
+// ── ISS ───────────────────────────────────────────────────────────
+var currentIssLat=0,currentIssLon=0;
+var issInterval=null;
+function fetchISS(){
+  fetch('https://api.wheretheiss.at/v1/satellites/25544')
+    .then(r=>r.json()).then(d=>{
+      currentIssLat=parseFloat(d.latitude);
+      currentIssLon=parseFloat(d.longitude);
+      document.getElementById('iss-coords').textContent=
+        'Lat: '+currentIssLat.toFixed(2)+'  Lon: '+currentIssLon.toFixed(2);
+      document.getElementById('iss-extra').textContent=
+        'Alt: '+Math.round(d.altitude)+' km  Speed: '+
+        Math.round(d.velocity).toLocaleString()+' km/h  '+d.visibility;
+      var overhead=currentIssLat>32&&currentIssLat<35.2&&
+                   currentIssLon>-83.4&&currentIssLon<-78.5;
+      document.getElementById('iss-status').textContent=
+        overhead?'ISS is overhead South Carolina!':'Not currently overhead SC';
+      updateISS(currentIssLat,currentIssLon);
+    }).catch(()=>{document.getElementById('iss-status').textContent='ISS data unavailable';});
+}
+
+// ── Dow Jones ─────────────────────────────────────────────────────
+var dowVals=[],dowTimes=[],dowColor='#00ff88';
+
+function loadDow(){
+  var nowTs=Math.floor(Date.now()/1000);
+  var startTs=nowTs-(60*60*8);
+  fetch('https://finnhub.io/api/v1/stock/candle?symbol=DIA&resolution=5&from='+startTs+'&to='+nowTs+'&token='+FINNHUB_KEY)
+    .then(r=>r.json()).then(d=>{
+      if(!d.c||d.s==='no_data'||d.c.length<2){
+        return fetch('https://finnhub.io/api/v1/quote?symbol=DIA&token='+FINNHUB_KEY)
+          .then(r=>r.json()).then(q=>{
+            dowColor=q.d>=0?'#00ff88':'#ff4444';
+            document.getElementById('dow-price').textContent=
+              '$'+q.c.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+            document.getElementById('dow-change').innerHTML=
+              '<span style="color:'+dowColor+';">'+(q.d>=0?'▲':'▼')+
+              ' '+Math.abs(q.d).toFixed(2)+' ('+Math.abs(q.dp).toFixed(2)+'%)</span>'+
+              '<span style="color:#555;"> market closed</span>';
+            document.getElementById('dow-low').textContent='Low: $'+q.l.toFixed(2);
+            document.getElementById('dow-high').textContent='High: $'+q.h.toFixed(2);
+            dowVals=[q.o,q.o,q.c,q.c];
+            dowTimes=[startTs,startTs+100,nowTs-100,nowTs];
+            drawDowChart();
+          });
+      }
+      dowVals=d.c;dowTimes=d.t;
+      var first=dowVals[0],last=dowVals[dowVals.length-1];
+      var change=last-first,pct=((change/first)*100).toFixed(2);
+      dowColor=change>=0?'#00ff88':'#ff4444';
+      document.getElementById('dow-price').textContent=
+        '$'+last.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      document.getElementById('dow-change').innerHTML=
+        '<span style="color:'+dowColor+';">'+(change>=0?'▲':'▼')+
+        ' '+Math.abs(change).toFixed(2)+' ('+Math.abs(pct)+'%)</span>';
+      document.getElementById('dow-low').textContent='Low: $'+Math.min.apply(null,dowVals).toFixed(2);
+      document.getElementById('dow-high').textContent='High: $'+Math.max.apply(null,dowVals).toFixed(2);
+      drawDowChart();
+    }).catch(()=>{document.getElementById('dow-price').textContent='Unavailable';});
+}
+
+function drawDowChart(){
+  var canvas=document.getElementById('dowChart');
+  var ctx=canvas.getContext('2d');
+  var W=canvas.width=canvas.parentElement.clientWidth-32;
+  var H=canvas.height=180;
+  ctx.clearRect(0,0,W,H);
+  if(dowVals.length<2)return;
+  var minVal=Math.min.apply(null,dowVals);
+  var maxVal=Math.max.apply(null,dowVals);
+  var pad=(maxVal-minVal)*0.1||1;
+  minVal-=pad;maxVal+=pad;
+  var range=maxVal-minVal;
+  var LEFT=52,BOTTOM=24,chartW=W-LEFT,chartH=H-BOTTOM;
+  ctx.fillStyle='#0d0d0d';ctx.fillRect(LEFT,0,chartW,chartH);
+  ctx.textAlign='right';ctx.fillStyle='#444';ctx.font='10px monospace';
+  for(var i=0;i<=4;i++){
+    var gy=chartH-(i/4)*chartH;
+    ctx.strokeStyle='#1e1e1e';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(LEFT,gy);ctx.lineTo(W,gy);ctx.stroke();
+    ctx.fillText('$'+(minVal+(i/4)*range).toFixed(1),LEFT-4,gy+4);
   }
-}
-
-function onDisconnected() {
-  document.getElementById('dot').classList.remove('on');
-  document.getElementById('connectBtn').disabled    = false;
-  document.getElementById('disconnectBtn').disabled = true;
-}
-function disconnect() { if (device) device.gatt.disconnect(); }
-
-// ── Three.js Globe ────────────────────────────────────────────────
-var scene, camera, renderer, earthMesh, surfaceGroup, issMarker, scMarker;
-var isDragging = false, prevMouse = {x:0,y:0}, rotVel = {x:0,y:0};
-
-function ll2v(lat, lon, r) {
-  var phi   = (90 - lat) * Math.PI / 180;
-  var theta = (lon + 180) * Math.PI / 180;
-  return {
-    x: -r * Math.sin(phi) * Math.cos(theta),
-    y:  r * Math.cos(phi),
-    z:  r * Math.sin(phi) * Math.sin(theta)
+  ctx.textAlign='center';
+  var step=Math.floor(dowVals.length/4);
+  for(var j=0;j<=4;j++){
+    var idx=Math.min(j*step,dowVals.length-1);
+    var gx=LEFT+(idx/(dowVals.length-1))*chartW;
+    ctx.strokeStyle='#1e1e1e';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,chartH);ctx.stroke();
+    if(dowTimes[idx]){
+      var t=new Date(dowTimes[idx]*1000);
+      ctx.fillStyle='#444';ctx.font='10px monospace';
+      ctx.fillText(t.getHours()+':'+(t.getMinutes()<10?'0':'')+t.getMinutes(),gx,H-6);
+    }
+  }
+  var grad=ctx.createLinearGradient(0,0,0,chartH);
+  grad.addColorStop(0,dowColor==='#00ff88'?'rgba(0,255,136,0.3)':'rgba(255,68,68,0.3)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();ctx.moveTo(LEFT,chartH);
+  dowVals.forEach(function(v,i){
+    var x=LEFT+(i/(dowVals.length-1))*chartW;
+    var y=chartH-((v-minVal)/range)*chartH;
+    ctx.lineTo(x,y);
+  });
+  ctx.lineTo(W,chartH);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  ctx.beginPath();
+  dowVals.forEach(function(v,i){
+    var x=LEFT+(i/(dowVals.length-1))*chartW;
+    var y=chartH-((v-minVal)/range)*chartH;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle=dowColor;ctx.lineWidth=2;ctx.stroke();
+  var lastX=W,lastY=chartH-((dowVals[dowVals.length-1]-minVal)/range)*chartH;
+  ctx.beginPath();ctx.arc(lastX,lastY,5,0,Math.PI*2);ctx.fillStyle=dowColor;ctx.fill();
+  canvas.onmousemove=function(e){
+    var rect=canvas.getBoundingClientRect();
+    var mx=e.clientX-rect.left;
+    if(mx<LEFT){document.getElementById('dow-time-label').textContent='hover for price';return;}
+    var idx=Math.round((mx-LEFT)/chartW*(dowVals.length-1));
+    idx=Math.max(0,Math.min(idx,dowVals.length-1));
+    drawDowChart();
+    var cx2=LEFT+(idx/(dowVals.length-1))*chartW;
+    var cy2=chartH-((dowVals[idx]-minVal)/range)*chartH;
+    ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(cx2,0);ctx.lineTo(cx2,chartH);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(LEFT,cy2);ctx.lineTo(W,cy2);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();ctx.arc(cx2,cy2,4,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
+    var tip='$'+dowVals[idx].toFixed(2);
+    ctx.font='11px monospace';ctx.textAlign='left';
+    var tw=ctx.measureText(tip).width+16;
+    var tx=cx2+8,ty=cy2-14;
+    if(tx+tw>W)tx=cx2-tw-8;if(ty<0)ty=4;
+    ctx.fillStyle='#222';ctx.strokeStyle='#444';ctx.lineWidth=1;
+    ctx.beginPath();ctx.roundRect(tx,ty,tw,22,4);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#fff';ctx.fillText(tip,tx+8,ty+15);
+    if(dowTimes[idx]){
+      var t2=new Date(dowTimes[idx]*1000);
+      document.getElementById('dow-time-label').textContent=
+        t2.getHours()+':'+(t2.getMinutes()<10?'0':'')+t2.getMinutes();
+    }
+  };
+  canvas.onmouseleave=function(){
+    drawDowChart();
+    document.getElementById('dow-time-label').textContent='hover for price';
   };
 }
 
-function placeMarker(m, lat, lon) {
-  var p = ll2v(lat, lon, 1.06);
-  m.position.set(p.x, p.y, p.z);
-  m.lookAt(new THREE.Vector3(0,0,0));
-  m.rotateX(Math.PI / 2);
+// ── Load all data — called after BLE connect ──────────────────────
+function loadAllData(){
+  // Word of day + fun fact
+  const dayIdx=new Date().getDate()-1;
+  document.getElementById('word').textContent=words[dayIdx];
+  document.getElementById('worddef').textContent=defs[dayIdx];
+  var doy=Math.floor((new Date()-new Date(new Date().getFullYear(),0,0))/86400000);
+  document.getElementById('funfact').textContent=facts[doy%facts.length];
+
+  // Moon + holiday
+  getMoonPhase();
+  getNextHoliday();
+
+  // Weather
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=35.0468&longitude=-82.0874&current_weather=true&temperature_unit=fahrenheit')
+    .then(r=>r.json()).then(d=>{
+      document.getElementById('w-temp').innerHTML=Math.round(d.current_weather.temperature)+'&deg;F';
+      const wc=d.current_weather.weathercode;
+      const descs=[[0,'Clear sky'],[1,'Mainly clear'],[2,'Partly cloudy'],[3,'Overcast'],
+        [45,'Foggy'],[51,'Drizzle'],[61,'Rainy'],[71,'Snowy'],[80,'Rain showers'],[95,'Thunderstorm']];
+      let desc='Cloudy';
+      for(const [k,v] of descs){if(wc>=k)desc=v;}
+      document.getElementById('w-desc').textContent=desc;
+    }).catch(()=>{document.getElementById('w-desc').textContent='Unavailable';});
+
+  // Bitcoin
+  fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
+    .then(r=>r.json()).then(d=>{
+      document.getElementById('btc').textContent='$'+Math.round(d.bitcoin.usd).toLocaleString();
+    }).catch(()=>{document.getElementById('btc').textContent='$--';});
+
+  // Dad Joke
+  fetch('https://icanhazdadjoke.com/',{headers:{'Accept':'application/json'}})
+    .then(r=>r.json()).then(d=>{document.getElementById('joke').textContent=d.joke;})
+    .catch(()=>{document.getElementById('joke').textContent='Could not load joke';});
+
+  // NASA
+  fetch('https://api.nasa.gov/planetary/apod?api_key='+NASA_KEY)
+    .then(r=>r.json()).then(d=>{
+      document.getElementById('nasa-title').textContent=d.title;
+      document.getElementById('nasa-desc').textContent=d.explanation.substring(0,200)+'...';
+      if(d.media_type==='image'){
+        var img=document.getElementById('nasa-img');
+        img.src=d.url;img.style.display='block';
+      }
+    }).catch(()=>{document.getElementById('nasa-title').textContent='NASA unavailable';});
+
+  // News
+  fetch('https://finnhub.io/api/v1/news?category=general&token='+FINNHUB_KEY)
+    .then(r=>r.json()).then(d=>{
+      if(!Array.isArray(d)||d.length===0){
+        document.getElementById('news-list').innerHTML='<div class="sub">No headlines available</div>';
+        return;
+      }
+      var html='';
+      d.slice(0,6).forEach(function(item){
+        if(!item.headline||!item.url)return;
+        var date=new Date(item.datetime*1000).toLocaleDateString();
+        html+='<div class="news-item">'+
+          '<div class="news-title"><a href="'+item.url+'" target="_blank">'+item.headline+'</a></div>'+
+          '<div class="news-source">'+item.source+' &nbsp;&bull;&nbsp; '+date+'</div></div>';
+      });
+      document.getElementById('news-list').innerHTML=html||'<div class="sub">No headlines found</div>';
+    }).catch(()=>{
+      document.getElementById('news-list').innerHTML='<div class="sub">Could not load headlines</div>';
+    });
+
+  // Dow Jones
+  loadDow();
+
+  // ISS
+  fetchISS();
+  if(issInterval) clearInterval(issInterval);
+  issInterval=setInterval(fetchISS,5000);
 }
 
-function updateISS(lat, lon) {
-  if (!issMarker || !earthMesh) return;
-  var p = ll2v(lat, lon, 1.06);
-  var vec = new THREE.Vector3(p.x, p.y, p.z);
-  var matrix = new THREE.Matrix4();
+// ── BLE ───────────────────────────────────────────────────────────
+let device,characteristic,currentLine='';
+
+async function connect(){
+  try{
+    document.getElementById('connectBtn').textContent='Scanning...';
+    device=await navigator.bluetooth.requestDevice({
+      filters:[{name:'ESP32-Dashboard'}],optionalServices:[SERVICE_UUID]});
+    device.addEventListener('gattserverdisconnected',onDisconnected);
+    const server=await device.gatt.connect();
+    const service=await server.getPrimaryService(SERVICE_UUID);
+    characteristic=await service.getCharacteristic(CHARACTERISTIC_UUID);
+    await characteristic.startNotifications();
+    characteristic.addEventListener('characteristicvaluechanged',onData);
+    document.getElementById('dot').classList.add('on');
+    document.getElementById('connectBtn').disabled=true;
+    document.getElementById('disconnectBtn').disabled=false;
+    document.getElementById('connectBtn').textContent='Connect to ESP32';
+    loadAllData();
+  }catch(e){
+    document.getElementById('connectBtn').textContent='Connect to ESP32';
+    alert('Connection failed: '+e);
+  }
+}
+function onData(e){
+  const chunk=new TextDecoder().decode(e.target.value);
+  if(chunk==='\n'){processLine(currentLine.trim());currentLine='';}
+  else currentLine+=chunk;
+}
+function processLine(line){
+  if(line.startsWith('TIME:'))
+    document.getElementById('uptime').textContent=line.substring(5);
+}
+function onDisconnected(){
+  document.getElementById('dot').classList.remove('on');
+  document.getElementById('connectBtn').disabled=false;
+  document.getElementById('disconnectBtn').disabled=true;
+  if(issInterval){clearInterval(issInterval);issInterval=null;}
+}
+function disconnect(){if(device)device.gatt.disconnect();}
+
+// ── Three.js Globe ────────────────────────────────────────────────
+var scene,camera,renderer,earthMesh,surfaceGroup,issMarker,scMarker;
+var isDragging=false,prevMouse={x:0,y:0},rotVel={x:0,y:0};
+
+function ll2v(lat,lon,r){
+  var phi=(90-lat)*Math.PI/180,theta=(lon+180)*Math.PI/180;
+  return{x:-r*Math.sin(phi)*Math.cos(theta),y:r*Math.cos(phi),z:r*Math.sin(phi)*Math.sin(theta)};
+}
+function placeMarker(m,lat,lon){
+  var p=ll2v(lat,lon,1.06);m.position.set(p.x,p.y,p.z);
+  m.lookAt(new THREE.Vector3(0,0,0));m.rotateX(Math.PI/2);
+}
+function updateISS(lat,lon){
+  if(!issMarker||!earthMesh)return;
+  var p=ll2v(lat,lon,1.06);
+  var vec=new THREE.Vector3(p.x,p.y,p.z);
+  var matrix=new THREE.Matrix4();
   matrix.makeRotationFromEuler(earthMesh.rotation);
   vec.applyMatrix4(matrix);
-  issMarker.position.set(vec.x, vec.y, vec.z);
+  issMarker.position.set(vec.x,vec.y,vec.z);
   issMarker.lookAt(new THREE.Vector3(0,0,0));
-  issMarker.rotateX(Math.PI / 2);
+  issMarker.rotateX(Math.PI/2);
 }
 
-function initEarth() {
-  var container = document.getElementById('earth-container');
-  var W = container.clientWidth, H = 380;
-  scene    = new THREE.Scene();
-  camera   = new THREE.PerspectiveCamera(45, W/H, 0.1, 1000);
-  renderer = new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(W, H);
-  renderer.setClearColor(0x000008);
-  container.appendChild(renderer.domElement);
-  camera.position.z = 2.5;
+function initEarth(){
+  var container=document.getElementById('earth-container');
+  var W=container.clientWidth,H=380;
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(45,W/H,0.1,1000);
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(W,H);renderer.setClearColor(0x000008);
+  container.appendChild(renderer.domElement);camera.position.z=2.5;
 
-  // Stars
-  var sv = [];
-  for (var i = 0; i < 3000; i++)
-    sv.push((Math.random()-0.5)*200,(Math.random()-0.5)*200,(Math.random()-0.5)*200);
-  var sg = new THREE.BufferGeometry();
-  sg.setAttribute('position', new THREE.Float32BufferAttribute(sv,3));
-  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({color:0xffffff,size:0.12})));
+  var sv=[];
+  for(var i=0;i<3000;i++)sv.push((Math.random()-0.5)*200,(Math.random()-0.5)*200,(Math.random()-0.5)*200);
+  var sg=new THREE.BufferGeometry();
+  sg.setAttribute('position',new THREE.Float32BufferAttribute(sv,3));
+  scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.12})));
 
-  // Earth texture
-  var tc = document.createElement('canvas');
-  tc.width=2048; tc.height=1024;
-  var ctx = tc.getContext('2d');
-  ctx.fillStyle='#0a1a3a'; ctx.fillRect(0,0,2048,1024);
-  ctx.strokeStyle='#0d2244'; ctx.lineWidth=0.5;
+  var tc=document.createElement('canvas');tc.width=2048;tc.height=1024;
+  var ctx=tc.getContext('2d');
+  ctx.fillStyle='#0a1a3a';ctx.fillRect(0,0,2048,1024);
+  ctx.strokeStyle='#0d2244';ctx.lineWidth=0.5;
   for(var x=0;x<=360;x+=30){ctx.beginPath();ctx.moveTo(x/360*2048,0);ctx.lineTo(x/360*2048,1024);ctx.stroke();}
   for(var y=0;y<=180;y+=30){ctx.beginPath();ctx.moveTo(0,y/180*1024);ctx.lineTo(2048,y/180*1024);ctx.stroke();}
-
   function px(lon,lat){return{x:(lon+180)/360*2048,y:(90-lat)/180*1024};}
   function drawLand(pts,color,border){
-    ctx.fillStyle=color||'#1e5c30'; ctx.strokeStyle=border||'#2a7a3a'; ctx.lineWidth=1.5;
+    ctx.fillStyle=color||'#1e5c30';ctx.strokeStyle=border||'#2a7a3a';ctx.lineWidth=1.5;
     ctx.beginPath();
     pts.forEach(function(p,i){var c=px(p[0],p[1]);i===0?ctx.moveTo(c.x,c.y):ctx.lineTo(c.x,c.y);});
-    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.closePath();ctx.fill();ctx.stroke();
   }
-
-  // Continents
-  drawLand([[-168,72],[-140,72],[-120,72],[-95,72],[-75,72],[-60,70],[-55,65],
-    [-55,50],[-60,45],[-65,44],[-70,44],[-75,44],[-80,42],[-83,42],
-    [-80,35],[-81,31],[-81,25],[-85,24],[-90,18],[-85,16],[-83,10],[-77,8],
-    [-80,8],[-75,10],[-83,10],[-85,16],[-90,18],[-95,20],[-105,20],
-    [-110,24],[-117,32],[-120,34],[-124,46],[-124,49],[-130,54],[-140,58],
-    [-152,58],[-158,58],[-162,62],[-165,68],[-168,72]]);
+  drawLand([[-168,72],[-140,72],[-120,72],[-95,72],[-75,72],[-60,70],[-55,65],[-55,50],[-60,45],[-65,44],[-70,44],[-75,44],[-80,42],[-83,42],[-80,35],[-81,31],[-81,25],[-85,24],[-90,18],[-85,16],[-83,10],[-77,8],[-80,8],[-75,10],[-83,10],[-85,16],[-90,18],[-95,20],[-105,20],[-110,24],[-117,32],[-120,34],[-124,46],[-124,49],[-130,54],[-140,58],[-152,58],[-158,58],[-162,62],[-165,68],[-168,72]]);
   drawLand([[-45,84],[-20,84],[-18,78],[-20,72],[-28,68],[-45,60],[-52,65],[-52,72],[-45,84]]);
-  drawLand([[-80,12],[-75,12],[-65,14],[-62,14],[-60,16],[-50,10],[-40,5],
-    [-35,0],[-35,-5],[-38,-10],[-38,-15],[-40,-22],[-42,-22],[-44,-23],
-    [-48,-28],[-50,-32],[-52,-34],[-58,-38],[-62,-42],[-66,-46],
-    [-68,-52],[-72,-52],[-70,-44],[-76,-38],[-80,-30],[-80,-18],[-76,-10],
-    [-78,-2],[-80,2],[-80,8],[-80,12]]);
-  drawLand([[-10,36],[0,36],[10,36],[20,36],[28,38],[36,36],[36,42],
-    [28,42],[26,44],[24,46],[28,48],[30,52],[28,56],[24,60],[20,64],
-    [16,68],[14,68],[10,62],[8,58],[4,54],[0,50],[-2,48],[-4,44],
-    [-8,40],[-10,38],[-10,36]]);
-  drawLand([[4,58],[8,58],[10,58],[14,56],[18,58],[20,62],[24,68],[28,70],
-    [26,72],[20,72],[16,70],[14,66],[10,62],[6,60],[4,58]]);
-  drawLand([[-18,38],[-8,36],[0,36],[10,36],[20,36],[30,36],[36,36],
-    [42,38],[44,36],[44,30],[42,24],[44,12],[44,4],[42,-4],[40,-10],
-    [36,-18],[34,-24],[28,-34],[22,-36],[18,-34],[14,-30],[12,-24],
-    [10,-18],[8,-4],[0,4],[-4,4],[-8,4],[-14,8],[-16,14],[-16,20],
-    [-18,28],[-18,38]]);
+  drawLand([[-80,12],[-75,12],[-65,14],[-62,14],[-60,16],[-50,10],[-40,5],[-35,0],[-35,-5],[-38,-10],[-38,-15],[-40,-22],[-42,-22],[-44,-23],[-48,-28],[-50,-32],[-52,-34],[-58,-38],[-62,-42],[-66,-46],[-68,-52],[-72,-52],[-70,-44],[-76,-38],[-80,-30],[-80,-18],[-76,-10],[-78,-2],[-80,2],[-80,8],[-80,12]]);
+  drawLand([[-10,36],[0,36],[10,36],[20,36],[28,38],[36,36],[36,42],[28,42],[26,44],[24,46],[28,48],[30,52],[28,56],[24,60],[20,64],[16,68],[14,68],[10,62],[8,58],[4,54],[0,50],[-2,48],[-4,44],[-8,40],[-10,38],[-10,36]]);
+  drawLand([[4,58],[8,58],[10,58],[14,56],[18,58],[20,62],[24,68],[28,70],[26,72],[20,72],[16,70],[14,66],[10,62],[6,60],[4,58]]);
+  drawLand([[-18,38],[-8,36],[0,36],[10,36],[20,36],[30,36],[36,36],[42,38],[44,36],[44,30],[42,24],[44,12],[44,4],[42,-4],[40,-10],[36,-18],[34,-24],[28,-34],[22,-36],[18,-34],[14,-30],[12,-24],[10,-18],[8,-4],[0,4],[-4,4],[-8,4],[-14,8],[-16,14],[-16,20],[-18,28],[-18,38]]);
   drawLand([[44,-12],[50,-14],[50,-24],[44,-26],[44,-18],[44,-12]]);
-  drawLand([[26,72],[40,72],[60,72],[80,72],[100,72],[120,72],[140,72],
-    [160,68],[168,64],[170,60],[166,60],[162,56],[160,52],[152,48],
-    [144,44],[140,40],[140,34],[138,34],[136,34],[130,30],[122,26],
-    [118,22],[114,20],[108,16],[102,8],[100,4],[102,2],[104,-2],
-    [108,-6],[114,-8],[116,-4],[118,4],[120,10],[118,16],[116,20],
-    [108,20],[100,22],[96,26],[90,28],[80,30],[72,22],[68,22],[64,24],
-    [60,26],[58,22],[56,26],[54,30],[52,36],[48,42],[44,42],[40,38],
-    [36,36],[32,38],[28,42],[26,44],[28,50],[30,56],[28,60],[26,64],[26,72]]);
-  drawLand([[130,31],[132,33],[134,34],[136,36],[138,36],[140,38],[140,40],
-    [138,42],[136,44],[134,44],[130,42],[130,38],[130,34],[130,31]]);
-  drawLand([[114,-22],[118,-20],[122,-18],[126,-14],[130,-12],[136,-12],
-    [140,-16],[144,-18],[148,-18],[152,-22],[154,-26],[154,-32],[150,-36],
-    [148,-38],[144,-38],[140,-38],[136,-36],[130,-34],[126,-34],[120,-34],
-    [116,-32],[114,-26],[114,-22]]);
-  drawLand([[166,-46],[168,-44],[170,-42],[172,-40],[172,-36],[170,-34],
-    [168,-36],[166,-38],[166,-42],[166,-46]]);
+  drawLand([[26,72],[40,72],[60,72],[80,72],[100,72],[120,72],[140,72],[160,68],[168,64],[170,60],[166,60],[162,56],[160,52],[152,48],[144,44],[140,40],[140,34],[138,34],[136,34],[130,30],[122,26],[118,22],[114,20],[108,16],[102,8],[100,4],[102,2],[104,-2],[108,-6],[114,-8],[116,-4],[118,4],[120,10],[118,16],[116,20],[108,20],[100,22],[96,26],[90,28],[80,30],[72,22],[68,22],[64,24],[60,26],[58,22],[56,26],[54,30],[52,36],[48,42],[44,42],[40,38],[36,36],[32,38],[28,42],[26,44],[28,50],[30,56],[28,60],[26,64],[26,72]]);
+  drawLand([[130,31],[132,33],[134,34],[136,36],[138,36],[140,38],[140,40],[138,42],[136,44],[134,44],[130,42],[130,38],[130,34],[130,31]]);
+  drawLand([[114,-22],[118,-20],[122,-18],[126,-14],[130,-12],[136,-12],[140,-16],[144,-18],[148,-18],[152,-22],[154,-26],[154,-32],[150,-36],[148,-38],[144,-38],[140,-38],[136,-36],[130,-34],[126,-34],[120,-34],[116,-32],[114,-26],[114,-22]]);
+  drawLand([[166,-46],[168,-44],[170,-42],[172,-40],[172,-36],[170,-34],[168,-36],[166,-38],[166,-42],[166,-46]]);
   drawLand([[-180,-70],[0,-70],[180,-70],[180,-90],[-180,-90],[-180,-70]],'#c8dde8','#aabbcc');
-
-  // SC dot on texture
   ctx.fillStyle='rgba(0,102,255,0.9)';
-  var sc = px(-82,35);
-  ctx.beginPath(); ctx.arc(sc.x,sc.y,10,0,Math.PI*2); ctx.fill();
-
-  // Continent labels
-  ctx.font='bold 20px sans-serif'; ctx.fillStyle='rgba(255,255,255,0.45)';
+  var sc=px(-82,35);ctx.beginPath();ctx.arc(sc.x,sc.y,10,0,Math.PI*2);ctx.fill();
+  ctx.font='bold 20px sans-serif';ctx.fillStyle='rgba(255,255,255,0.45)';
   [['N. America',-100,45],['S. America',-58,-15],['Europe',15,50],
    ['Africa',20,5],['Asia',90,45],['Australia',135,-28]
   ].forEach(function(l){var p=px(l[1],l[2]);ctx.fillText(l[0],p.x-30,p.y);});
 
-  var tex = new THREE.CanvasTexture(tc);
-  earthMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(1,64,64),
-    new THREE.MeshPhongMaterial({map:tex,specular:0x222244,shininess:20})
-  );
+  var tex=new THREE.CanvasTexture(tc);
+  earthMesh=new THREE.Mesh(new THREE.SphereGeometry(1,64,64),
+    new THREE.MeshPhongMaterial({map:tex,specular:0x222244,shininess:20}));
   scene.add(earthMesh);
-
-  // Atmosphere
-  scene.add(new THREE.Mesh(
-    new THREE.SphereGeometry(1.02,64,64),
-    new THREE.MeshPhongMaterial({color:0x2244aa,transparent:true,opacity:0.1,side:THREE.FrontSide})
-  ));
-
-  // Lights
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.02,64,64),
+    new THREE.MeshPhongMaterial({color:0x2244aa,transparent:true,opacity:0.1,side:THREE.FrontSide})));
   scene.add(new THREE.AmbientLight(0x334466,0.9));
-  var sun = new THREE.DirectionalLight(0xffeedd,1.3);
-  sun.position.set(5,3,5); scene.add(sun);
+  var sun=new THREE.DirectionalLight(0xffeedd,1.3);sun.position.set(5,3,5);scene.add(sun);
 
-  // Surface group — children rotate with earth
-  surfaceGroup = new THREE.Group();
-  earthMesh.add(surfaceGroup);
+  surfaceGroup=new THREE.Group();earthMesh.add(surfaceGroup);
+  scMarker=new THREE.Mesh(new THREE.SphereGeometry(0.022,10,10),
+    new THREE.MeshBasicMaterial({color:0x0066ff}));
+  surfaceGroup.add(scMarker);placeMarker(scMarker,34.5,-82.0);
 
-  // SC marker
-  scMarker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.022,10,10),
-    new THREE.MeshBasicMaterial({color:0x0066ff})
-  );
-  surfaceGroup.add(scMarker);
-  placeMarker(scMarker, 34.5, -82.0);
-
-  // Orbital path
   var op=[];
   for(var i=0;i<=360;i++){
     var lg=i-180,lt=51.6*Math.sin(i*Math.PI/180),p=ll2v(lt,lg,1.03);
     op.push(new THREE.Vector3(p.x,p.y,p.z));
   }
-  surfaceGroup.add(new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(op),
-    new THREE.LineBasicMaterial({color:0x00ff88,opacity:0.2,transparent:true})
-  ));
+  surfaceGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(op),
+    new THREE.LineBasicMaterial({color:0x00ff88,opacity:0.2,transparent:true})));
 
-  // ISS marker — in scene, position updated manually
-  issMarker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.028,10,10),
-    new THREE.MeshBasicMaterial({color:0x00ff88})
-  );
-  var ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.035,0.052,20),
-    new THREE.MeshBasicMaterial({color:0x00ff88,transparent:true,opacity:0.5,side:THREE.DoubleSide})
-  );
-  issMarker.add(ring);
-  scene.add(issMarker);
+  issMarker=new THREE.Mesh(new THREE.SphereGeometry(0.028,10,10),
+    new THREE.MeshBasicMaterial({color:0x00ff88}));
+  var ring=new THREE.Mesh(new THREE.RingGeometry(0.035,0.052,20),
+    new THREE.MeshBasicMaterial({color:0x00ff88,transparent:true,opacity:0.5,side:THREE.DoubleSide}));
+  issMarker.add(ring);scene.add(issMarker);
 
-  // Mouse drag
-  var el = renderer.domElement;
-  el.addEventListener('mousedown', function(e){
-    isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; rotVel={x:0,y:0};
-  });
-  el.addEventListener('mousemove', function(e){
-    if(!isDragging) return;
-    var dx=e.clientX-prevMouse.x, dy=e.clientY-prevMouse.y;
-    rotVel.y=dx*0.005; rotVel.x=dy*0.005;
-    earthMesh.rotation.y+=rotVel.y;
-    earthMesh.rotation.x+=rotVel.x;
+  var el=renderer.domElement;
+  el.addEventListener('mousedown',function(e){isDragging=true;prevMouse={x:e.clientX,y:e.clientY};rotVel={x:0,y:0};});
+  el.addEventListener('mousemove',function(e){
+    if(!isDragging)return;
+    var dx=e.clientX-prevMouse.x,dy=e.clientY-prevMouse.y;
+    rotVel.y=dx*0.005;rotVel.x=dy*0.005;
+    earthMesh.rotation.y+=rotVel.y;earthMesh.rotation.x+=rotVel.x;
     earthMesh.rotation.x=Math.max(-Math.PI/2,Math.min(Math.PI/2,earthMesh.rotation.x));
     prevMouse={x:e.clientX,y:e.clientY};
-    updateISS(currentIssLat, currentIssLon);
+    updateISS(currentIssLat,currentIssLon);
   });
-  el.addEventListener('mouseup',    function(){isDragging=false;});
-  el.addEventListener('mouseleave', function(){isDragging=false;});
-
+  el.addEventListener('mouseup',function(){isDragging=false;});
+  el.addEventListener('mouseleave',function(){isDragging=false;});
   animate();
 }
 
-function animate() {
+function animate(){
   requestAnimationFrame(animate);
-  if (!isDragging) {
-    rotVel.y *= 0.95;
-    rotVel.x *= 0.95;
-    earthMesh.rotation.y += rotVel.y + 0.0008;
-    updateISS(currentIssLat, currentIssLon);
+  if(!isDragging){
+    rotVel.y*=0.95;rotVel.x*=0.95;
+    earthMesh.rotation.y+=rotVel.y+0.0008;
+    updateISS(currentIssLat,currentIssLon);
   }
-  if (issMarker) issMarker.children[0].rotation.z += 0.02;
-  renderer.render(scene, camera);
+  if(issMarker)issMarker.children[0].rotation.z+=0.02;
+  renderer.render(scene,camera);
 }
 
-window.onload = function(){ initEarth(); };
+window.onload=function(){initEarth();};
 </script>
 </body>
 </html>
