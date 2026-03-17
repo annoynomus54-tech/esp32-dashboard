@@ -2,81 +2,239 @@
 <html>
 <head>
   <title>ESP32 BLE Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --green: #00ff88;
+      --green-dim: rgba(0,255,136,0.15);
+      --green-glow: 0 0 20px rgba(0,255,136,0.3);
+      --red: #ff4444;
+      --blue: #4488ff;
+      --bg: #080808;
+      --card: #0e0e0e;
+      --border: #1a1a1a;
+      --text: #e0e0e0;
+      --dim: #444;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: monospace; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
-    h1 { color: #00ff88; font-size: 1.4em; margin-bottom: 20px; letter-spacing: 2px; }
+    body {
+      font-family: 'Share Tech Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(0deg,
+        transparent, transparent 2px,
+        rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+      pointer-events: none; z-index: 999;
+    }
+ 
+    /* ── Header ── */
+    .header {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 28px 32px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap; gap: 20px;
+    }
+    .header-left { flex: 1; min-width: 200px; }
+    .header-title {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 2.4em; font-weight: 700;
+      color: var(--green); letter-spacing: 3px;
+      text-transform: uppercase;
+      text-shadow: var(--green-glow); line-height: 1;
+    }
+    .header-sub { font-size: 0.75em; color: var(--dim); letter-spacing: 4px; margin-top: 4px; }
+    .header-btns { display: flex; flex-direction: column; gap: 10px; min-width: 180px; }
+    .btn {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.95em; padding: 12px 24px;
+      border-radius: 4px; border: 1px solid;
+      cursor: pointer; letter-spacing: 2px;
+      text-transform: uppercase; transition: all 0.2s;
+      width: 100%; text-align: center;
+    }
+    .btn-connect { background: var(--green); color: #000; border-color: var(--green); font-weight: bold; }
+    .btn-connect:hover { box-shadow: var(--green-glow); transform: translateY(-1px); }
+    .btn-connect:disabled { background: #1a1a1a; color: var(--dim); border-color: var(--border); box-shadow: none; transform: none; cursor: not-allowed; }
+    .btn-disconnect { background: transparent; color: var(--red); border-color: var(--red); }
+    .btn-disconnect:hover { background: rgba(255,68,68,0.1); }
+    .btn-disconnect:disabled { color: var(--dim); border-color: var(--border); cursor: not-allowed; }
+    .status-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); transition: background 0.3s; }
+    .status-dot.on { background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(0,255,136,0); }
+    }
+    .status-text { font-size: 0.8em; color: var(--dim); letter-spacing: 2px; }
+ 
+    /* ── Section tabs ── */
+    .tabs {
+      display: flex; gap: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+    }
+    .tab {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.8em; letter-spacing: 3px;
+      text-transform: uppercase; padding: 14px 24px;
+      cursor: pointer; color: var(--dim);
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s; background: none; border-top: none; border-left: none; border-right: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--green); border-bottom-color: var(--green); }
+ 
+    /* ── Content sections ── */
+    .section { display: none; padding: 24px 32px; }
+    .section.active { display: block; }
+ 
+    /* ── Grid ── */
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-    .card { background: #111; border: 1px solid #222; border-radius: 8px; padding: 16px; }
-    .card h2 { font-size: 0.75em; color: #555; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
-    .value { font-size: 1.4em; color: #00ff88; margin-bottom: 6px; }
-    .time-big { font-size: 2.8em; color: #fff; letter-spacing: 4px; font-weight: bold; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+ 
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px;
+      position: relative; overflow: hidden;
+    }
+    .card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--green), transparent);
+      opacity: 0.2;
+    }
+    .card h2 {
+      font-size: 0.7em; color: var(--dim);
+      letter-spacing: 3px; text-transform: uppercase;
+      margin-bottom: 12px; font-family: 'Share Tech Mono', monospace;
+    }
+    .value { font-size: 1.4em; color: var(--green); margin-bottom: 6px; }
+    .time-big { font-size: 2.8em; color: #fff; letter-spacing: 4px; font-weight: bold; font-family: 'Rajdhani', sans-serif; }
     .sub { font-size: 0.85em; color: #888; line-height: 1.5; }
-    .time-tz { font-size: 0.75em; color: #00ff88; letter-spacing: 3px; margin-top: 6px; }
-    button { background: #00ff88; color: #000; border: none; padding: 10px 20px;
-             font-family: monospace; font-size: 1em; border-radius: 4px; cursor: pointer;
-             margin-bottom: 20px; margin-right: 8px; }
-    button:disabled { background: #333; color: #666; cursor: not-allowed; }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-           background: #ff4444; margin-right: 6px; }
-    .dot.on { background: #00ff88; animation: blink 1.5s infinite; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-    .nasa-img { width: 100%; border-radius: 6px; margin: 10px 0;
-                max-height: 400px; object-fit: cover; display: none; }
-    #earth-container { width: 100%; height: 380px; border-radius: 8px;
-                       overflow: hidden; background: #000; margin-bottom: 10px; cursor: grab; }
+    .time-tz { font-size: 0.75em; color: var(--green); letter-spacing: 3px; margin-top: 6px; }
+ 
+    /* ── Dashboard specific ── */
+    .nasa-img { width: 100%; border-radius: 6px; margin: 10px 0; max-height: 400px; object-fit: cover; display: none; }
+    #earth-container { width: 100%; height: 380px; border-radius: 8px; overflow: hidden; background: #000; margin-bottom: 10px; cursor: grab; }
     #earth-container:active { cursor: grabbing; }
     .iss-coords { text-align: center; font-size: 0.8em; color: #888; margin-top: 6px; }
-    .iss-status { text-align: center; font-size: 1em; color: #00ff88; margin-top: 4px; }
-    .iss-extra  { text-align: center; font-size: 0.75em; color: #555; margin-top: 4px; }
-    .news-item { padding: 10px 0; border-bottom: 1px solid #1a1a1a; }
+    .iss-status { text-align: center; font-size: 1em; color: var(--green); margin-top: 4px; }
+    .iss-extra  { text-align: center; font-size: 0.75em; color: var(--dim); margin-top: 4px; }
+    .news-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
     .news-item:last-child { border-bottom: none; }
-    .news-title a { color: #00ff88; text-decoration: none; font-size: 0.95em; line-height: 1.5; }
+    .news-title a { color: var(--green); text-decoration: none; font-size: 0.95em; line-height: 1.5; }
     .news-title a:hover { text-decoration: underline; }
-    .news-source { font-size: 0.75em; color: #555; margin-top: 3px; }
+    .news-source { font-size: 0.75em; color: var(--dim); margin-top: 3px; }
     #dowChart { display: block; width: 100%; }
+    .bar-wrap { height: 6px; background: #1a1a1a; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+    .bar { height: 6px; border-radius: 3px; transition: width 0.5s; width: 0%; }
+ 
+    /* ── Controller specific ── */
+    .color-wheel-wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    #colorWheel { border-radius: 50%; cursor: crosshair; display: block; }
+    .color-preview { width: 100%; height: 40px; border-radius: 6px; border: 1px solid var(--border); transition: background 0.2s; }
+    .rgb-vals { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; width: 100%; }
+    .rgb-val { text-align: center; font-size: 0.85em; }
+    .rgb-val span { display: block; color: var(--dim); font-size: 0.75em; margin-bottom: 2px; }
+    #servoCanvas { display: block; margin: 0 auto; cursor: grab; }
+    #servoCanvas:active { cursor: grabbing; }
+    .servo-angle { text-align: center; font-size: 2.5em; color: var(--green); font-family: 'Rajdhani', sans-serif; font-weight: 700; margin-top: 8px; }
+    .servo-hint { text-align: center; font-size: 0.7em; color: var(--dim); margin-top: 4px; letter-spacing: 2px; }
+    #potCanvas { display: block; margin: 0 auto; }
+    .pot-angle { text-align: center; font-size: 2.5em; color: var(--blue); font-family: 'Rajdhani', sans-serif; font-weight: 700; margin-top: 8px; }
+    .sensor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+    .sensor-val { background: #111; border: 1px solid var(--border); border-radius: 6px; padding: 16px; text-align: center; }
+    .sensor-val .big { font-family: 'Rajdhani', sans-serif; font-size: 2.8em; font-weight: 700; line-height: 1; }
+    .sensor-val .unit { font-size: 0.8em; color: var(--dim); margin-top: 4px; letter-spacing: 2px; }
+ 
+    /* ── Locked overlay ── */
+    .locked {
+      position: absolute; inset: 0;
+      background: rgba(8,8,8,0.88);
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 8px; z-index: 10;
+      backdrop-filter: blur(2px);
+    }
+    .locked-text { font-size: 0.8em; color: var(--dim); letter-spacing: 3px; text-align: center; }
+ 
+    @media (max-width: 700px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .header { padding: 20px 16px; }
+      .header-title { font-size: 1.6em; }
+      .section { padding: 16px; }
+      .tabs { padding: 0 16px; }
+    }
   </style>
 </head>
 <body>
-<h1><span class="dot" id="dot"></span>ESP32 BLE DASHBOARD</h1>
-<button id="connectBtn" onclick="connect()">Connect to ESP32</button>
-<button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
-
+ 
+<div class="header">
+  <div class="header-left">
+    <div class="header-title">ESP32 BLE Dashboard</div>
+    <div class="header-sub">Bluetooth Low Energy Control Panel</div>
+    <div class="status-row">
+      <div class="status-dot" id="dot"></div>
+      <div class="status-text" id="status-text">NOT CONNECTED</div>
+    </div>
+  </div>
+  <div class="header-btns">
+    <button class="btn btn-connect" id="connectBtn" onclick="connect()">Connect</button>
+    <button class="btn btn-disconnect" id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+  </div>
+</div>
+ 
+<div class="tabs">
+  <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
+  <button class="tab" onclick="showTab('controller')">Controller</button>
+</div>
+ 
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- DASHBOARD SECTION -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="section active" id="section-dashboard">
 <div class="grid">
-
+ 
   <div class="card">
     <h2>South Carolina Time</h2>
     <span class="time-big" id="t-time">--:--:--</span>
-    <span style="color:#00ff88;font-size:1em;margin-left:8px;" id="t-ampm"></span>
+    <span style="color:var(--green);font-size:1em;margin-left:8px;" id="t-ampm"></span>
     <div class="time-tz">EDT — Eastern Daylight Time</div>
     <div class="sub" id="t-date" style="margin-top:4px;"></div>
   </div>
-
+ 
   <div class="card">
     <h2>ESP32 Uptime</h2>
     <span class="time-big" id="uptime" style="font-size:2em;">--:--:--</span>
     <div class="time-tz">Time since last power on</div>
     <div class="sub" style="margin-top:4px;">Connect via BLE to see uptime</div>
   </div>
-
+ 
   <div class="card">
     <h2>Weather - Inman, SC</h2>
     <div class="value" id="w-temp">--&deg;F</div>
     <div class="sub" id="w-desc">Connect to ESP32 to load...</div>
     <div class="sub" style="margin-top:4px;">Inman, South Carolina</div>
   </div>
-
+ 
   <div class="card">
     <h2>Bitcoin Price</h2>
     <div class="value" id="btc">$--</div>
     <div class="sub">USD / BTC via CoinGecko</div>
   </div>
-
+ 
   <div class="card">
     <h2>Dad Joke</h2>
     <div class="sub" id="joke" style="font-size:1em;color:#ccc;line-height:1.6;">Connect to ESP32 to load...</div>
   </div>
-
+ 
   <div style="display:grid;grid-template-rows:1fr 1fr;gap:16px;">
     <div class="card">
       <h2>Word of the Day</h2>
@@ -88,14 +246,14 @@
       <div class="sub" id="funfact" style="font-size:0.9em;color:#ccc;line-height:1.7;">Connect to ESP32 to load...</div>
     </div>
   </div>
-
+ 
   <div class="card">
     <h2>Moon Phase</h2>
     <canvas id="moonCanvas" width="120" height="120" style="display:block;margin:0 auto 10px;"></canvas>
     <div class="value" id="moon-phase" style="text-align:center;font-size:1em;">--</div>
     <div class="sub" style="text-align:center;" id="moon-illum">Connect to ESP32 to load...</div>
   </div>
-
+ 
   <div class="card">
     <h2>Next Holiday</h2>
     <div class="value" id="holiday-name" style="font-size:1em;color:#fff;margin-bottom:8px;">--</div>
@@ -103,12 +261,12 @@
     <div class="time-tz">days away</div>
     <div class="sub" id="holiday-date" style="margin-top:6px;">Connect to ESP32 to load...</div>
   </div>
-
+ 
   <div class="card" style="grid-column:1/-1;">
     <h2>Latest News Headlines</h2>
     <div id="news-list"><div class="sub">Connect to ESP32 to load...</div></div>
   </div>
-
+ 
   <div class="card" style="grid-column:1/-1;">
     <h2>Dow Jones — Today <span id="dow-change" style="font-size:0.9em;margin-left:10px;"></span></h2>
     <div id="dow-price" style="font-size:1.8em;color:#fff;font-weight:bold;margin-bottom:12px;">--</div>
@@ -119,37 +277,103 @@
       <span class="sub" id="dow-high"></span>
     </div>
   </div>
-
+ 
   <div class="card" style="grid-column:1/-1;">
-    <h2>ISS Tracker — Live Position <span style="color:#555;font-size:0.8em;">(drag to rotate)</span></h2>
+    <h2>ISS Tracker — Live Position <span style="color:var(--dim);font-size:0.8em;">(drag to rotate)</span></h2>
     <div id="earth-container"></div>
     <div class="iss-coords" id="iss-coords">Lat: -- &nbsp; Lon: --</div>
     <div class="iss-extra"  id="iss-extra"></div>
     <div class="iss-status" id="iss-status">Connect to ESP32 to load...</div>
   </div>
-
+ 
   <div class="card" style="grid-column:1/-1;">
     <h2>NASA Photo of the Day</h2>
     <div class="value" id="nasa-title" style="font-size:1em;margin-bottom:8px;">Connect to ESP32 to load...</div>
     <img id="nasa-img" class="nasa-img">
     <div class="sub" id="nasa-desc"></div>
   </div>
-
+ 
 </div>
-
+</div>
+ 
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- CONTROLLER SECTION -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="section" id="section-controller">
+<div class="grid-2">
+ 
+  <div class="card" id="card-rgb">
+    <h2>RGB LED Control</h2>
+    <div class="color-wheel-wrap">
+      <canvas id="colorWheel" width="200" height="200"></canvas>
+      <div class="color-preview" id="colorPreview"></div>
+      <div class="rgb-vals">
+        <div class="rgb-val"><span>RED</span><span id="rVal">0</span></div>
+        <div class="rgb-val"><span>GREEN</span><span id="gVal">0</span></div>
+        <div class="rgb-val"><span>BLUE</span><span id="bVal">0</span></div>
+      </div>
+    </div>
+    <div class="locked" id="lock-rgb"><div class="locked-text">Connect to<br>ESP32</div></div>
+  </div>
+ 
+  <div class="card" id="card-servo">
+    <h2>Servo Motor</h2>
+    <canvas id="servoCanvas" width="240" height="200"></canvas>
+    <div class="servo-angle"><span id="servoAngle">90</span>&deg;</div>
+    <div class="servo-hint">Drag the arm to control</div>
+    <div class="locked" id="lock-servo"><div class="locked-text">Connect to<br>ESP32</div></div>
+  </div>
+ 
+  <div class="card" id="card-pot">
+    <h2>Potentiometer — Live Reading</h2>
+    <canvas id="potCanvas" width="240" height="200"></canvas>
+    <div class="pot-angle"><span id="potAngle">--</span>&deg;</div>
+    <div class="locked" id="lock-pot"><div class="locked-text">Connect to<br>ESP32</div></div>
+  </div>
+ 
+  <div class="card" id="card-dht">
+    <h2>Temperature &amp; Humidity — DHT11</h2>
+    <canvas id="dht-canvas" width="240" height="160"></canvas>
+    <div class="sensor-grid">
+      <div class="sensor-val">
+        <div class="big" id="tempVal" style="color:#ff6644;">--</div>
+        <div class="unit">&deg;F</div>
+        <div class="bar-wrap"><div class="bar" id="tempBar" style="background:#ff6644;"></div></div>
+      </div>
+      <div class="sensor-val">
+        <div class="big" id="humVal" style="color:#44aaff;">--</div>
+        <div class="unit">% RH</div>
+        <div class="bar-wrap"><div class="bar" id="humBar" style="background:#44aaff;"></div></div>
+      </div>
+    </div>
+    <div class="locked" id="lock-dht"><div class="locked-text">Connect to<br>ESP32</div></div>
+  </div>
+ 
+</div>
+</div>
+ 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r126/three.min.js"></script>
 <script>
-
-// ═══════════════════════════════════════════════════════════════════
-// ── PASTE YOUR API KEYS HERE ───────────────────────────────────────
+ 
+// ═══════════════════════════════════════════════════════
+// ── PASTE YOUR API KEYS HERE ───────────────────────────
 const FINNHUB_KEY = 'd6slut1r01qtlmfofsjgd6slut1r01qtlmfofsk0';
 const NASA_KEY    = '231FzeCLIvuxAuxCmQ030YbGs0bkDFizf04nLytL';
-// ═══════════════════════════════════════════════════════════════════
-
+// ═══════════════════════════════════════════════════════
+ 
 const SERVICE_UUID        = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
 const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
-
-// ── Word list ─────────────────────────────────────────────────────
+ 
+// ── Tab switching ─────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(function(t,i){
+    t.classList.toggle('active', ['dashboard','controller'][i]===name);
+  });
+  document.getElementById('section-dashboard').classList.toggle('active', name==='dashboard');
+  document.getElementById('section-controller').classList.toggle('active', name==='controller');
+}
+ 
+// ── Word + fact lists ─────────────────────────────────
 const words = ["ephemeral","luminous","serendipity","resilient","cascade",
   "eloquent","solitude","wanderlust","zenith","whimsical","tenacious","opulent",
   "reverie","jubilant","melancholy","tranquil","vivid","nostalgia","profound",
@@ -164,10 +388,9 @@ const defs = ["Short-lived","Full of light","Finding good things by chance",
   "Calm and untroubled","Boldly daring","Charming old-fashioned","Great beauty",
   "Deep in thought","Shining brightly","Passing swiftly","Endures pain quietly",
   "Happily carefree","Eager to learn"];
-
-const facts = ["Honey never spoils — archaeologists found 3000-year-old honey in Egyptian tombs still edible.",
+const facts = ["Honey never spoils — archaeologists found 3000-year-old honey still edible.",
   "A group of flamingos is called a flamboyance.",
-  "The shortest war in history lasted 38 minutes — between Britain and Zanzibar in 1896.",
+  "The shortest war in history lasted 38 minutes — Britain vs Zanzibar 1896.",
   "Octopuses have three hearts, blue blood, and nine brains.",
   "The Eiffel Tower grows 6 inches taller in summer due to thermal expansion.",
   "A day on Venus is longer than a year on Venus.",
@@ -196,8 +419,8 @@ const facts = ["Honey never spoils — archaeologists found 3000-year-old honey 
   "A small child could swim through the veins of a blue whale.",
   "The inventor of the frisbee was turned into a frisbee after he died.",
   "Polar bears are left-handed."];
-
-// ── SC Time — always runs ─────────────────────────────────────────
+ 
+// ── SC Time — always runs ─────────────────────────────
 function updateSCTime() {
   const now=new Date(),utc=now.getTime()+now.getTimezoneOffset()*60000;
   const sc=new Date(utc+(-4*60*60000));
@@ -212,10 +435,9 @@ function updateSCTime() {
   document.getElementById('t-date').textContent=
     days[sc.getDay()]+', '+months[sc.getMonth()]+' '+sc.getDate()+', '+sc.getFullYear();
 }
-updateSCTime();
-setInterval(updateSCTime,1000);
-
-// ── Moon Phase helpers ────────────────────────────────────────────
+updateSCTime(); setInterval(updateSCTime,1000);
+ 
+// ── Moon ──────────────────────────────────────────────
 function getMoonPhase(){
   const now=new Date();
   var y=now.getFullYear(),mo=now.getMonth()+1,d=now.getDate();
@@ -253,277 +475,193 @@ function drawMoon(age){
     ctx.bezierCurveTo(cx+xs2*r,cy-r,cx+xs2*r,cy+r,cx,cy+r);ctx.fill();
   }
   ctx.restore();
-  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
-  ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.stroke();
 }
-
-// ── Holiday helpers ───────────────────────────────────────────────
-function getEaster(y){
-  var a=y%19,b=y>>2,c=(b/25|0)+1,d=(c*3>>2),e=((a*19-((c*8+5)/25|0)+d+15)%30);
-  e+=(29578-a-e*32>>10)-(y%7+b-e+d+2)%7+114;
-  return new Date(y,(e>>5)-1,e&31);
-}
+ 
+// ── Holiday ───────────────────────────────────────────
+function getEaster(y){var a=y%19,b=y>>2,c=(b/25|0)+1,d=(c*3>>2),e=((a*19-((c*8+5)/25|0)+d+15)%30);e+=(29578-a-e*32>>10)-(y%7+b-e+d+2)%7+114;return new Date(y,(e>>5)-1,e&31);}
 function getMemorialDay(y){var d=new Date(y,4,31);d.setDate(31-d.getDay());return d;}
 function getLaborDay(y){var d=new Date(y,8,1);d.setDate(1+(7-d.getDay())%7);return d;}
 function getThanksgiving(y){var d=new Date(y,10,1);d.setDate(1+(4-d.getDay()+7)%7+21);return d;}
 function getNextHoliday(){
   const now=new Date(),y=now.getFullYear();
-  const holidays=[
-    {name:"New Year's Day",date:new Date(y,0,1)},
-    {name:"Valentine's Day",date:new Date(y,1,14)},
-    {name:"St. Patrick's Day",date:new Date(y,2,17)},
-    {name:"Easter",date:getEaster(y)},
-    {name:"Memorial Day",date:getMemorialDay(y)},
-    {name:"Independence Day",date:new Date(y,6,4)},
-    {name:"Labor Day",date:getLaborDay(y)},
-    {name:"Halloween",date:new Date(y,9,31)},
-    {name:"Thanksgiving",date:getThanksgiving(y)},
-    {name:"Christmas",date:new Date(y,11,25)},
-    {name:"New Year's Day",date:new Date(y+1,0,1)},
-  ];
-  var next=null;
-  for(var i=0;i<holidays.length;i++){if(holidays[i].date>now){next=holidays[i];break;}}
+  const h=[{name:"New Year's Day",date:new Date(y,0,1)},{name:"Valentine's Day",date:new Date(y,1,14)},
+    {name:"St. Patrick's Day",date:new Date(y,2,17)},{name:"Easter",date:getEaster(y)},
+    {name:"Memorial Day",date:getMemorialDay(y)},{name:"Independence Day",date:new Date(y,6,4)},
+    {name:"Labor Day",date:getLaborDay(y)},{name:"Halloween",date:new Date(y,9,31)},
+    {name:"Thanksgiving",date:getThanksgiving(y)},{name:"Christmas",date:new Date(y,11,25)},
+    {name:"New Year's Day",date:new Date(y+1,0,1)}];
+  var next=null;for(var i=0;i<h.length;i++){if(h[i].date>now){next=h[i];break;}}
   if(!next)return;
   var days=Math.ceil((next.date-now)/(1000*60*60*24));
   var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   document.getElementById('holiday-name').textContent=next.name;
   document.getElementById('holiday-days').textContent=days;
-  document.getElementById('holiday-date').textContent=
-    mo[next.date.getMonth()]+' '+next.date.getDate()+', '+next.date.getFullYear();
+  document.getElementById('holiday-date').textContent=mo[next.date.getMonth()]+' '+next.date.getDate()+', '+next.date.getFullYear();
 }
-
-// ── ISS ───────────────────────────────────────────────────────────
-var currentIssLat=0,currentIssLon=0;
-var issInterval=null;
+ 
+// ── ISS ───────────────────────────────────────────────
+var currentIssLat=0,currentIssLon=0,issInterval=null;
 function fetchISS(){
   fetch('https://api.wheretheiss.at/v1/satellites/25544')
     .then(r=>r.json()).then(d=>{
-      currentIssLat=parseFloat(d.latitude);
-      currentIssLon=parseFloat(d.longitude);
-      document.getElementById('iss-coords').textContent=
-        'Lat: '+currentIssLat.toFixed(2)+'  Lon: '+currentIssLon.toFixed(2);
-      document.getElementById('iss-extra').textContent=
-        'Alt: '+Math.round(d.altitude)+' km  Speed: '+
-        Math.round(d.velocity).toLocaleString()+' km/h  '+d.visibility;
-      var overhead=currentIssLat>32&&currentIssLat<35.2&&
-                   currentIssLon>-83.4&&currentIssLon<-78.5;
-      document.getElementById('iss-status').textContent=
-        overhead?'ISS is overhead South Carolina!':'Not currently overhead SC';
+      currentIssLat=parseFloat(d.latitude);currentIssLon=parseFloat(d.longitude);
+      document.getElementById('iss-coords').textContent='Lat: '+currentIssLat.toFixed(2)+'  Lon: '+currentIssLon.toFixed(2);
+      document.getElementById('iss-extra').textContent='Alt: '+Math.round(d.altitude)+' km  Speed: '+Math.round(d.velocity).toLocaleString()+' km/h  '+d.visibility;
+      var ov=currentIssLat>32&&currentIssLat<35.2&&currentIssLon>-83.4&&currentIssLon<-78.5;
+      document.getElementById('iss-status').textContent=ov?'ISS is overhead South Carolina!':'Not currently overhead SC';
       updateISS(currentIssLat,currentIssLon);
     }).catch(()=>{document.getElementById('iss-status').textContent='ISS data unavailable';});
 }
-
-// ── Dow Jones ─────────────────────────────────────────────────────
+ 
+// ── Dow Jones ─────────────────────────────────────────
 var dowVals=[],dowTimes=[],dowColor='#00ff88';
-
 function loadDow(){
-  var nowTs=Math.floor(Date.now()/1000);
-  var startTs=nowTs-(60*60*8);
+  var nowTs=Math.floor(Date.now()/1000),startTs=nowTs-(60*60*8);
   fetch('https://finnhub.io/api/v1/stock/candle?symbol=DIA&resolution=5&from='+startTs+'&to='+nowTs+'&token='+FINNHUB_KEY)
     .then(r=>r.json()).then(d=>{
       if(!d.c||d.s==='no_data'||d.c.length<2){
         return fetch('https://finnhub.io/api/v1/quote?symbol=DIA&token='+FINNHUB_KEY)
           .then(r=>r.json()).then(q=>{
             dowColor=q.d>=0?'#00ff88':'#ff4444';
-            document.getElementById('dow-price').textContent=
-              '$'+q.c.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-            document.getElementById('dow-change').innerHTML=
-              '<span style="color:'+dowColor+';">'+(q.d>=0?'▲':'▼')+
-              ' '+Math.abs(q.d).toFixed(2)+' ('+Math.abs(q.dp).toFixed(2)+'%)</span>'+
-              '<span style="color:#555;"> market closed</span>';
+            document.getElementById('dow-price').textContent='$'+q.c.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+            document.getElementById('dow-change').innerHTML='<span style="color:'+dowColor+';">'+(q.d>=0?'▲':'▼')+' '+Math.abs(q.d).toFixed(2)+' ('+Math.abs(q.dp).toFixed(2)+'%)</span><span style="color:#555;"> market closed</span>';
             document.getElementById('dow-low').textContent='Low: $'+q.l.toFixed(2);
             document.getElementById('dow-high').textContent='High: $'+q.h.toFixed(2);
-            dowVals=[q.o,q.o,q.c,q.c];
-            dowTimes=[startTs,startTs+100,nowTs-100,nowTs];
+            dowVals=[q.o,q.o,q.c,q.c];dowTimes=[startTs,startTs+100,nowTs-100,nowTs];
             drawDowChart();
           });
       }
       dowVals=d.c;dowTimes=d.t;
-      var first=dowVals[0],last=dowVals[dowVals.length-1];
-      var change=last-first,pct=((change/first)*100).toFixed(2);
+      var first=dowVals[0],last=dowVals[dowVals.length-1],change=last-first,pct=((change/first)*100).toFixed(2);
       dowColor=change>=0?'#00ff88':'#ff4444';
-      document.getElementById('dow-price').textContent=
-        '$'+last.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-      document.getElementById('dow-change').innerHTML=
-        '<span style="color:'+dowColor+';">'+(change>=0?'▲':'▼')+
-        ' '+Math.abs(change).toFixed(2)+' ('+Math.abs(pct)+'%)</span>';
+      document.getElementById('dow-price').textContent='$'+last.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+      document.getElementById('dow-change').innerHTML='<span style="color:'+dowColor+';">'+(change>=0?'▲':'▼')+' '+Math.abs(change).toFixed(2)+' ('+Math.abs(pct)+'%)</span>';
       document.getElementById('dow-low').textContent='Low: $'+Math.min.apply(null,dowVals).toFixed(2);
       document.getElementById('dow-high').textContent='High: $'+Math.max.apply(null,dowVals).toFixed(2);
       drawDowChart();
     }).catch(()=>{document.getElementById('dow-price').textContent='Unavailable';});
 }
-
 function drawDowChart(){
   var canvas=document.getElementById('dowChart');
   var ctx=canvas.getContext('2d');
-  var W=canvas.width=canvas.parentElement.clientWidth-32;
-  var H=canvas.height=180;
+  var W=canvas.width=canvas.parentElement.clientWidth-32,H=canvas.height=180;
   ctx.clearRect(0,0,W,H);
   if(dowVals.length<2)return;
-  var minVal=Math.min.apply(null,dowVals);
-  var maxVal=Math.max.apply(null,dowVals);
-  var pad=(maxVal-minVal)*0.1||1;
-  minVal-=pad;maxVal+=pad;
-  var range=maxVal-minVal;
-  var LEFT=52,BOTTOM=24,chartW=W-LEFT,chartH=H-BOTTOM;
+  var minVal=Math.min.apply(null,dowVals),maxVal=Math.max.apply(null,dowVals);
+  var pad=(maxVal-minVal)*0.1||1;minVal-=pad;maxVal+=pad;
+  var range=maxVal-minVal,LEFT=52,BOTTOM=24,chartW=W-LEFT,chartH=H-BOTTOM;
   ctx.fillStyle='#0d0d0d';ctx.fillRect(LEFT,0,chartW,chartH);
-  ctx.textAlign='right';ctx.fillStyle='#444';ctx.font='10px monospace';
-  for(var i=0;i<=4;i++){
-    var gy=chartH-(i/4)*chartH;
-    ctx.strokeStyle='#1e1e1e';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(LEFT,gy);ctx.lineTo(W,gy);ctx.stroke();
-    ctx.fillText('$'+(minVal+(i/4)*range).toFixed(1),LEFT-4,gy+4);
-  }
+  ctx.textAlign='right';ctx.fillStyle='#444';ctx.font='10px Share Tech Mono';
+  for(var i=0;i<=4;i++){var gy=chartH-(i/4)*chartH;ctx.strokeStyle='#1e1e1e';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(LEFT,gy);ctx.lineTo(W,gy);ctx.stroke();ctx.fillText('$'+(minVal+(i/4)*range).toFixed(1),LEFT-4,gy+4);}
   ctx.textAlign='center';
   var step=Math.floor(dowVals.length/4);
-  for(var j=0;j<=4;j++){
-    var idx=Math.min(j*step,dowVals.length-1);
-    var gx=LEFT+(idx/(dowVals.length-1))*chartW;
-    ctx.strokeStyle='#1e1e1e';ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,chartH);ctx.stroke();
-    if(dowTimes[idx]){
-      var t=new Date(dowTimes[idx]*1000);
-      ctx.fillStyle='#444';ctx.font='10px monospace';
-      ctx.fillText(t.getHours()+':'+(t.getMinutes()<10?'0':'')+t.getMinutes(),gx,H-6);
-    }
-  }
-  var grad=ctx.createLinearGradient(0,0,0,chartH);
-  grad.addColorStop(0,dowColor==='#00ff88'?'rgba(0,255,136,0.3)':'rgba(255,68,68,0.3)');
-  grad.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.beginPath();ctx.moveTo(LEFT,chartH);
-  dowVals.forEach(function(v,i){
-    var x=LEFT+(i/(dowVals.length-1))*chartW;
-    var y=chartH-((v-minVal)/range)*chartH;
-    ctx.lineTo(x,y);
-  });
-  ctx.lineTo(W,chartH);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
-  ctx.beginPath();
-  dowVals.forEach(function(v,i){
-    var x=LEFT+(i/(dowVals.length-1))*chartW;
-    var y=chartH-((v-minVal)/range)*chartH;
-    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-  });
-  ctx.strokeStyle=dowColor;ctx.lineWidth=2;ctx.stroke();
-  var lastX=W,lastY=chartH-((dowVals[dowVals.length-1]-minVal)/range)*chartH;
-  ctx.beginPath();ctx.arc(lastX,lastY,5,0,Math.PI*2);ctx.fillStyle=dowColor;ctx.fill();
-  canvas.onmousemove=function(e){
-    var rect=canvas.getBoundingClientRect();
-    var mx=e.clientX-rect.left;
-    if(mx<LEFT){document.getElementById('dow-time-label').textContent='hover for price';return;}
-    var idx=Math.round((mx-LEFT)/chartW*(dowVals.length-1));
-    idx=Math.max(0,Math.min(idx,dowVals.length-1));
-    drawDowChart();
-    var cx2=LEFT+(idx/(dowVals.length-1))*chartW;
-    var cy2=chartH-((dowVals[idx]-minVal)/range)*chartH;
-    ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1;ctx.setLineDash([4,4]);
-    ctx.beginPath();ctx.moveTo(cx2,0);ctx.lineTo(cx2,chartH);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(LEFT,cy2);ctx.lineTo(W,cy2);ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();ctx.arc(cx2,cy2,4,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();
-    var tip='$'+dowVals[idx].toFixed(2);
-    ctx.font='11px monospace';ctx.textAlign='left';
-    var tw=ctx.measureText(tip).width+16;
-    var tx=cx2+8,ty=cy2-14;
-    if(tx+tw>W)tx=cx2-tw-8;if(ty<0)ty=4;
-    ctx.fillStyle='#222';ctx.strokeStyle='#444';ctx.lineWidth=1;
-    ctx.beginPath();ctx.roundRect(tx,ty,tw,22,4);ctx.fill();ctx.stroke();
-    ctx.fillStyle='#fff';ctx.fillText(tip,tx+8,ty+15);
-    if(dowTimes[idx]){
-      var t2=new Date(dowTimes[idx]*1000);
-      document.getElementById('dow-time-label').textContent=
-        t2.getHours()+':'+(t2.getMinutes()<10?'0':'')+t2.getMinutes();
-    }
-  };
-  canvas.onmouseleave=function(){
-    drawDowChart();
-    document.getElementById('dow-time-label').textContent='hover for price';
-  };
+  for(var j=0;j<=4;j++){var idx=Math.min(j*step,dowVals.length-1),gx=LEFT+(idx/(dowVals.length-1))*chartW;ctx.strokeStyle='#1e1e1e';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,chartH);ctx.stroke();if(dowTimes[idx]){var t=new Date(dowTimes[idx]*1000);ctx.fillStyle='#444';ctx.font='10px Share Tech Mono';ctx.fillText(t.getHours()+':'+(t.getMinutes()<10?'0':'')+t.getMinutes(),gx,H-6);}}
+  var grad=ctx.createLinearGradient(0,0,0,chartH);grad.addColorStop(0,dowColor==='#00ff88'?'rgba(0,255,136,0.3)':'rgba(255,68,68,0.3)');grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();ctx.moveTo(LEFT,chartH);dowVals.forEach(function(v,i){ctx.lineTo(LEFT+(i/(dowVals.length-1))*chartW,chartH-((v-minVal)/range)*chartH);});ctx.lineTo(W,chartH);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  ctx.beginPath();dowVals.forEach(function(v,i){var x=LEFT+(i/(dowVals.length-1))*chartW,y=chartH-((v-minVal)/range)*chartH;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});ctx.strokeStyle=dowColor;ctx.lineWidth=2;ctx.stroke();
+  var lastX=W,lastY=chartH-((dowVals[dowVals.length-1]-minVal)/range)*chartH;ctx.beginPath();ctx.arc(lastX,lastY,5,0,Math.PI*2);ctx.fillStyle=dowColor;ctx.fill();
+  canvas.onmousemove=function(e){var rect=canvas.getBoundingClientRect(),mx=e.clientX-rect.left;if(mx<LEFT){document.getElementById('dow-time-label').textContent='hover for price';return;}var idx=Math.round((mx-LEFT)/chartW*(dowVals.length-1));idx=Math.max(0,Math.min(idx,dowVals.length-1));drawDowChart();var cx2=LEFT+(idx/(dowVals.length-1))*chartW,cy2=chartH-((dowVals[idx]-minVal)/range)*chartH;ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(cx2,0);ctx.lineTo(cx2,chartH);ctx.stroke();ctx.beginPath();ctx.moveTo(LEFT,cy2);ctx.lineTo(W,cy2);ctx.stroke();ctx.setLineDash([]);ctx.beginPath();ctx.arc(cx2,cy2,4,0,Math.PI*2);ctx.fillStyle='#fff';ctx.fill();var tip='$'+dowVals[idx].toFixed(2);ctx.font='11px Share Tech Mono';ctx.textAlign='left';var tw=ctx.measureText(tip).width+16,tx=cx2+8,ty=cy2-14;if(tx+tw>W)tx=cx2-tw-8;if(ty<0)ty=4;ctx.fillStyle='#222';ctx.strokeStyle='#444';ctx.lineWidth=1;ctx.beginPath();ctx.roundRect(tx,ty,tw,22,4);ctx.fill();ctx.stroke();ctx.fillStyle='#fff';ctx.fillText(tip,tx+8,ty+15);if(dowTimes[idx]){var t2=new Date(dowTimes[idx]*1000);document.getElementById('dow-time-label').textContent=t2.getHours()+':'+(t2.getMinutes()<10?'0':'')+t2.getMinutes();}};
+  canvas.onmouseleave=function(){drawDowChart();document.getElementById('dow-time-label').textContent='hover for price';};
 }
-
-// ── Load all data — called after BLE connect ──────────────────────
+ 
+// ── Load all dashboard data ───────────────────────────
 function loadAllData(){
-  // Word of day + fun fact
   const dayIdx=new Date().getDate()-1;
   document.getElementById('word').textContent=words[dayIdx];
   document.getElementById('worddef').textContent=defs[dayIdx];
   var doy=Math.floor((new Date()-new Date(new Date().getFullYear(),0,0))/86400000);
   document.getElementById('funfact').textContent=facts[doy%facts.length];
-
-  // Moon + holiday
   getMoonPhase();
   getNextHoliday();
-
-  // Weather
   fetch('https://api.open-meteo.com/v1/forecast?latitude=35.0468&longitude=-82.0874&current_weather=true&temperature_unit=fahrenheit')
     .then(r=>r.json()).then(d=>{
       document.getElementById('w-temp').innerHTML=Math.round(d.current_weather.temperature)+'&deg;F';
       const wc=d.current_weather.weathercode;
-      const descs=[[0,'Clear sky'],[1,'Mainly clear'],[2,'Partly cloudy'],[3,'Overcast'],
-        [45,'Foggy'],[51,'Drizzle'],[61,'Rainy'],[71,'Snowy'],[80,'Rain showers'],[95,'Thunderstorm']];
-      let desc='Cloudy';
-      for(const [k,v] of descs){if(wc>=k)desc=v;}
+      const descs=[[0,'Clear sky'],[1,'Mainly clear'],[2,'Partly cloudy'],[3,'Overcast'],[45,'Foggy'],[51,'Drizzle'],[61,'Rainy'],[71,'Snowy'],[80,'Rain showers'],[95,'Thunderstorm']];
+      let desc='Cloudy';for(const [k,v] of descs){if(wc>=k)desc=v;}
       document.getElementById('w-desc').textContent=desc;
     }).catch(()=>{document.getElementById('w-desc').textContent='Unavailable';});
-
-  // Bitcoin
   fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
-    .then(r=>r.json()).then(d=>{
-      document.getElementById('btc').textContent='$'+Math.round(d.bitcoin.usd).toLocaleString();
-    }).catch(()=>{document.getElementById('btc').textContent='$--';});
-
-  // Dad Joke
+    .then(r=>r.json()).then(d=>{document.getElementById('btc').textContent='$'+Math.round(d.bitcoin.usd).toLocaleString();})
+    .catch(()=>{document.getElementById('btc').textContent='$--';});
   fetch('https://icanhazdadjoke.com/',{headers:{'Accept':'application/json'}})
     .then(r=>r.json()).then(d=>{document.getElementById('joke').textContent=d.joke;})
     .catch(()=>{document.getElementById('joke').textContent='Could not load joke';});
-
-  // NASA
   fetch('https://api.nasa.gov/planetary/apod?api_key='+NASA_KEY)
     .then(r=>r.json()).then(d=>{
       document.getElementById('nasa-title').textContent=d.title;
       document.getElementById('nasa-desc').textContent=d.explanation.substring(0,200)+'...';
-      if(d.media_type==='image'){
-        var img=document.getElementById('nasa-img');
-        img.src=d.url;img.style.display='block';
-      }
+      if(d.media_type==='image'){var img=document.getElementById('nasa-img');img.src=d.url;img.style.display='block';}
     }).catch(()=>{document.getElementById('nasa-title').textContent='NASA unavailable';});
-
-  // News
   fetch('https://finnhub.io/api/v1/news?category=general&token='+FINNHUB_KEY)
     .then(r=>r.json()).then(d=>{
-      if(!Array.isArray(d)||d.length===0){
-        document.getElementById('news-list').innerHTML='<div class="sub">No headlines available</div>';
-        return;
-      }
-      var html='';
-      d.slice(0,6).forEach(function(item){
-        if(!item.headline||!item.url)return;
-        var date=new Date(item.datetime*1000).toLocaleDateString();
-        html+='<div class="news-item">'+
-          '<div class="news-title"><a href="'+item.url+'" target="_blank">'+item.headline+'</a></div>'+
-          '<div class="news-source">'+item.source+' &nbsp;&bull;&nbsp; '+date+'</div></div>';
-      });
+      if(!Array.isArray(d)||d.length===0){document.getElementById('news-list').innerHTML='<div class="sub">No headlines available</div>';return;}
+      var html='';d.slice(0,6).forEach(function(item){if(!item.headline||!item.url)return;var date=new Date(item.datetime*1000).toLocaleDateString();html+='<div class="news-item"><div class="news-title"><a href="'+item.url+'" target="_blank">'+item.headline+'</a></div><div class="news-source">'+item.source+' &nbsp;&bull;&nbsp; '+date+'</div></div>';});
       document.getElementById('news-list').innerHTML=html||'<div class="sub">No headlines found</div>';
-    }).catch(()=>{
-      document.getElementById('news-list').innerHTML='<div class="sub">Could not load headlines</div>';
-    });
-
-  // Dow Jones
+    }).catch(()=>{document.getElementById('news-list').innerHTML='<div class="sub">Could not load headlines</div>';});
   loadDow();
-
-  // ISS
   fetchISS();
-  if(issInterval) clearInterval(issInterval);
+  if(issInterval)clearInterval(issInterval);
   issInterval=setInterval(fetchISS,5000);
 }
-
-// ── BLE ───────────────────────────────────────────────────────────
+ 
+// ── Reset all on disconnect ───────────────────────────
+function resetAll(){
+  // Dashboard
+  document.getElementById('uptime').textContent='--:--:--';
+  document.getElementById('w-temp').innerHTML='--&deg;F';
+  document.getElementById('w-desc').textContent='Connect to ESP32 to load...';
+  document.getElementById('btc').textContent='$--';
+  document.getElementById('joke').textContent='Connect to ESP32 to load...';
+  document.getElementById('word').textContent='--';
+  document.getElementById('worddef').textContent='Connect to ESP32 to load...';
+  document.getElementById('funfact').textContent='Connect to ESP32 to load...';
+  document.getElementById('moon-phase').textContent='--';
+  document.getElementById('moon-illum').textContent='Connect to ESP32 to load...';
+  document.getElementById('holiday-name').textContent='--';
+  document.getElementById('holiday-days').textContent='--';
+  document.getElementById('holiday-date').textContent='Connect to ESP32 to load...';
+  document.getElementById('news-list').innerHTML='<div class="sub">Connect to ESP32 to load...</div>';
+  document.getElementById('dow-price').textContent='--';
+  document.getElementById('dow-change').innerHTML='';
+  document.getElementById('dow-low').textContent='';
+  document.getElementById('dow-high').textContent='';
+  document.getElementById('nasa-title').textContent='Connect to ESP32 to load...';
+  document.getElementById('nasa-img').style.display='none';
+  document.getElementById('nasa-desc').textContent='';
+  document.getElementById('iss-status').textContent='Connect to ESP32 to load...';
+  document.getElementById('iss-coords').textContent='Lat: -- Lon: --';
+  document.getElementById('iss-extra').textContent='';
+  if(issInterval){clearInterval(issInterval);issInterval=null;}
+  // Controller
+  document.getElementById('servoAngle').textContent='90';
+  drawServo(90);
+  document.getElementById('potAngle').textContent='--';
+  drawPot(0);
+  document.getElementById('tempVal').textContent='--';
+  document.getElementById('humVal').textContent='--';
+  document.getElementById('tempBar').style.width='0%';
+  document.getElementById('humBar').style.width='0%';
+  drawDHTGauge(0,0);
+  document.getElementById('colorPreview').style.background='#000';
+  document.getElementById('rVal').textContent='0';
+  document.getElementById('gVal').textContent='0';
+  document.getElementById('bVal').textContent='0';
+  // Locks
+  ['rgb','servo','pot','dht'].forEach(function(id){
+    document.getElementById('lock-'+id).style.display='flex';
+  });
+}
+ 
+// ── BLE ───────────────────────────────────────────────
 let device,characteristic,currentLine='';
-
+ 
 async function connect(){
   try{
     document.getElementById('connectBtn').textContent='Scanning...';
     device=await navigator.bluetooth.requestDevice({
-      filters:[{name:'ESP32-Dashboard'}],optionalServices:[SERVICE_UUID]});
+      filters:[{name:'ESP32-Controller'}],optionalServices:[SERVICE_UUID]});
     device.addEventListener('gattserverdisconnected',onDisconnected);
     const server=await device.gatt.connect();
     const service=await server.getPrimaryService(SERVICE_UUID);
@@ -531,12 +669,16 @@ async function connect(){
     await characteristic.startNotifications();
     characteristic.addEventListener('characteristicvaluechanged',onData);
     document.getElementById('dot').classList.add('on');
+    document.getElementById('status-text').textContent='CONNECTED';
     document.getElementById('connectBtn').disabled=true;
     document.getElementById('disconnectBtn').disabled=false;
-    document.getElementById('connectBtn').textContent='Connect to ESP32';
+    document.getElementById('connectBtn').textContent='Connect';
+    ['rgb','servo','pot','dht'].forEach(function(id){
+      document.getElementById('lock-'+id).style.display='none';
+    });
     loadAllData();
   }catch(e){
-    document.getElementById('connectBtn').textContent='Connect to ESP32';
+    document.getElementById('connectBtn').textContent='Connect';
     alert('Connection failed: '+e);
   }
 }
@@ -546,69 +688,194 @@ function onData(e){
   else currentLine+=chunk;
 }
 function processLine(line){
-  if(line.startsWith('TIME:'))
-    document.getElementById('uptime').textContent=line.substring(5);
+  if(!line)return;
+  if(line.startsWith('TIME:')){document.getElementById('uptime').textContent=line.substring(5);}
+  else if(line.startsWith('TEMP:')){var v=parseFloat(line.substring(5));document.getElementById('tempVal').textContent=v.toFixed(1);document.getElementById('tempBar').style.width=Math.min(((v-32)/168)*100,100)+'%';updateDHTGauge();}
+  else if(line.startsWith('HUM:')){var h=parseFloat(line.substring(4));document.getElementById('humVal').textContent=h.toFixed(1);document.getElementById('humBar').style.width=h+'%';updateDHTGauge();}
+  else if(line.startsWith('POT:')){var deg=parseInt(line.substring(4));document.getElementById('potAngle').textContent=deg;drawPot(deg);}
 }
 function onDisconnected(){
   document.getElementById('dot').classList.remove('on');
+  document.getElementById('status-text').textContent='NOT CONNECTED';
   document.getElementById('connectBtn').disabled=false;
   document.getElementById('disconnectBtn').disabled=true;
-  if(issInterval){clearInterval(issInterval);issInterval=null;}
+  resetAll();
 }
 function disconnect(){if(device)device.gatt.disconnect();}
-
-// ── Three.js Globe ────────────────────────────────────────────────
+function sendCmd(cmd){if(!characteristic)return;characteristic.writeValue(new TextEncoder().encode(cmd));}
+ 
+// ═══════════════════════════════════════════════════════
+// COLOR WHEEL
+// ═══════════════════════════════════════════════════════
+function drawColorWheel(){
+  var canvas=document.getElementById('colorWheel');
+  var ctx=canvas.getContext('2d'),cx=100,cy=100,r=95;
+  for(var a=0;a<360;a++){var sa=(a-1)*Math.PI/180,ea=(a+1)*Math.PI/180;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,sa,ea);ctx.closePath();ctx.fillStyle='hsl('+a+',100%,50%)';ctx.fill();}
+  var g1=ctx.createRadialGradient(cx,cy,0,cx,cy,r);g1.addColorStop(0,'rgba(255,255,255,1)');g1.addColorStop(0.5,'rgba(255,255,255,0)');g1.addColorStop(1,'rgba(255,255,255,0)');ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=g1;ctx.fill();
+  var g2=ctx.createRadialGradient(cx,cy,r*0.7,cx,cy,r);g2.addColorStop(0,'rgba(0,0,0,0)');g2.addColorStop(1,'rgba(0,0,0,0.6)');ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fillStyle=g2;ctx.fill();
+}
+function initColorWheel(){
+  drawColorWheel();
+  var canvas=document.getElementById('colorWheel');
+  var ctx=canvas.getContext('2d'),cx=100,cy=100,r=95;
+  var dragging=false;
+  function pick(x,y){
+    var dx=x-cx,dy=y-cy;if(Math.sqrt(dx*dx+dy*dy)>r)return;
+    var px=ctx.getImageData(x,y,1,1).data;
+    var rv=px[0],gv=px[1],bv=px[2];
+    document.getElementById('colorPreview').style.background='rgb('+rv+','+gv+','+bv+')';
+    document.getElementById('rVal').textContent=rv;
+    document.getElementById('gVal').textContent=gv;
+    document.getElementById('bVal').textContent=bv;
+    sendCmd('RGB:'+rv+','+gv+','+bv);
+    drawColorWheel();
+    ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+    ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle='rgb('+rv+','+gv+','+bv+')';ctx.fill();
+  }
+  canvas.addEventListener('mousedown',function(e){dragging=true;var r2=canvas.getBoundingClientRect();pick(e.clientX-r2.left,e.clientY-r2.top);});
+  canvas.addEventListener('mousemove',function(e){if(!dragging)return;var r2=canvas.getBoundingClientRect();pick(e.clientX-r2.left,e.clientY-r2.top);});
+  canvas.addEventListener('mouseup',function(){dragging=false;});
+  canvas.addEventListener('mouseleave',function(){dragging=false;});
+  canvas.addEventListener('touchstart',function(e){e.preventDefault();dragging=true;var r2=canvas.getBoundingClientRect(),t=e.touches[0];pick(t.clientX-r2.left,t.clientY-r2.top);});
+  canvas.addEventListener('touchmove',function(e){e.preventDefault();if(!dragging)return;var r2=canvas.getBoundingClientRect(),t=e.touches[0];pick(t.clientX-r2.left,t.clientY-r2.top);});
+  canvas.addEventListener('touchend',function(){dragging=false;});
+}
+ 
+// ═══════════════════════════════════════════════════════
+// SERVO — fixed: 0 deg is left, 90 is up, 180 is right
+// ═══════════════════════════════════════════════════════
+var servoDragging=false;
+function drawServo(angle){
+  var canvas=document.getElementById('servoCanvas');
+  var ctx=canvas.getContext('2d'),W=240,H=200,cx=120,cy=130;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#333';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.roundRect(cx-45,cy-30,90,60,8);ctx.fill();ctx.stroke();
+  ctx.fillStyle='#222';ctx.beginPath();ctx.roundRect(cx-35,cy-20,70,40,4);ctx.fill();
+  ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#333';
+  [[-55,0],[45,0]].forEach(function(o){ctx.beginPath();ctx.roundRect(cx+o[0],cy-12,12,24,3);ctx.fill();ctx.stroke();ctx.beginPath();ctx.arc(cx+o[0]+6,cy,4,0,Math.PI*2);ctx.strokeStyle='#444';ctx.stroke();});
+  ctx.beginPath();ctx.arc(cx,cy-30,14,0,Math.PI*2);ctx.fillStyle='#252525';ctx.fill();ctx.strokeStyle='#444';ctx.lineWidth=2;ctx.stroke();
+  for(var i=0;i<12;i++){var a=(i/12)*Math.PI*2;ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*8,cy-30+Math.sin(a)*8);ctx.lineTo(cx+Math.cos(a)*13,cy-30+Math.sin(a)*13);ctx.strokeStyle='#333';ctx.lineWidth=1.5;ctx.stroke();}
+ 
+  // FIX: 0deg=left(-PI), 90deg=up(-PI/2), 180deg=right(0)
+  var armAngle = -Math.PI + (angle/180)*Math.PI;
+  var armLen=55;
+  var ax=cx+Math.cos(armAngle)*armLen,ay=(cy-30)+Math.sin(armAngle)*armLen;
+  ctx.beginPath();ctx.moveTo(cx,cy-30);ctx.lineTo(ax+2,ay+2);ctx.strokeStyle='rgba(0,255,136,0.1)';ctx.lineWidth=12;ctx.lineCap='round';ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,cy-30);ctx.lineTo(ax,ay);ctx.strokeStyle='#00ff88';ctx.lineWidth=8;ctx.lineCap='round';ctx.stroke();
+  ctx.beginPath();ctx.arc(ax,ay,7,0,Math.PI*2);ctx.fillStyle='#00ff88';ctx.fill();
+  ctx.beginPath();ctx.arc(ax,ay,3,0,Math.PI*2);ctx.fillStyle='#000';ctx.fill();
+  ctx.beginPath();ctx.arc(cx,cy-30,7,0,Math.PI*2);ctx.fillStyle='#333';ctx.fill();
+  ctx.beginPath();ctx.arc(cx,cy-30,3,0,Math.PI*2);ctx.fillStyle='#00ff88';ctx.fill();
+  ctx.beginPath();ctx.arc(cx,cy-30,40,-Math.PI,0,false);ctx.strokeStyle='rgba(0,255,136,0.15)';ctx.lineWidth=3;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#333';ctx.font='10px Share Tech Mono';ctx.textAlign='center';
+  ctx.fillText('0°',cx-44,cy-30);ctx.fillText('90°',cx,cy-76);ctx.fillText('180°',cx+44,cy-30);
+}
+function initServo(){
+  drawServo(90);
+  var canvas=document.getElementById('servoCanvas'),cx=120,cy=130;
+  function getAngle(x,y){
+    var dx=x-cx,dy=y-(cy-30);
+    // atan2 gives angle from positive X axis
+    // We want: left=-PI=0deg, up=-PI/2=90deg, right=0=180deg
+    var a=Math.atan2(dy,dx);
+    // Map from [-PI, 0] to [0, 180]
+    var deg=Math.round((a+Math.PI)/Math.PI*180);
+    return Math.max(0,Math.min(180,deg));
+  }
+  canvas.addEventListener('mousedown',function(e){if(document.getElementById('lock-servo').style.display==='none')servoDragging=true;});
+  canvas.addEventListener('mousemove',function(e){
+    if(!servoDragging)return;
+    var r=canvas.getBoundingClientRect(),angle=getAngle(e.clientX-r.left,e.clientY-r.top);
+    document.getElementById('servoAngle').textContent=angle;drawServo(angle);sendCmd('SERVO:'+angle);
+  });
+  canvas.addEventListener('mouseup',function(){servoDragging=false;});
+  canvas.addEventListener('mouseleave',function(){servoDragging=false;});
+  canvas.addEventListener('touchstart',function(e){e.preventDefault();if(document.getElementById('lock-servo').style.display==='none')servoDragging=true;});
+  canvas.addEventListener('touchmove',function(e){
+    e.preventDefault();if(!servoDragging)return;
+    var r=canvas.getBoundingClientRect(),t=e.touches[0],angle=getAngle(t.clientX-r.left,t.clientY-r.top);
+    document.getElementById('servoAngle').textContent=angle;drawServo(angle);sendCmd('SERVO:'+angle);
+  });
+  canvas.addEventListener('touchend',function(){servoDragging=false;});
+}
+ 
+// ═══════════════════════════════════════════════════════
+// POTENTIOMETER
+// ═══════════════════════════════════════════════════════
+function drawPot(angleDeg){
+  var canvas=document.getElementById('potCanvas'),ctx=canvas.getContext('2d'),W=240,H=200,cx=120,cy=110;
+  ctx.clearRect(0,0,W,H);
+  ctx.beginPath();ctx.arc(cx,cy,60,0,Math.PI*2);ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,48,0,Math.PI*2);ctx.fillStyle='#141414';ctx.strokeStyle='#2a2a2a';ctx.fill();ctx.stroke();
+  var startA=135*Math.PI/180,endA=405*Math.PI/180;
+  ctx.beginPath();ctx.arc(cx,cy,52,startA,endA,false);ctx.strokeStyle='#222';ctx.lineWidth=8;ctx.stroke();
+  var activeEnd=(135+(angleDeg/270)*270)*Math.PI/180;
+  ctx.beginPath();ctx.arc(cx,cy,52,startA,activeEnd,false);ctx.strokeStyle='#4488ff';ctx.lineWidth=8;ctx.lineCap='round';ctx.stroke();
+  for(var i=0;i<=9;i++){var ta=(135+(i/9)*270)*Math.PI/180,inner=i%3===0?40:44;ctx.beginPath();ctx.moveTo(cx+Math.cos(ta)*inner,cy+Math.sin(ta)*inner);ctx.lineTo(cx+Math.cos(ta)*55,cy+Math.sin(ta)*55);ctx.strokeStyle=i%3===0?'#444':'#2a2a2a';ctx.lineWidth=i%3===0?2:1;ctx.stroke();}
+  var knobAngle=(135+(angleDeg/270)*270)*Math.PI/180;
+  ctx.beginPath();ctx.arc(cx,cy,32,0,Math.PI*2);var kg=ctx.createRadialGradient(cx-8,cy-8,2,cx,cy,32);kg.addColorStop(0,'#3a3a3a');kg.addColorStop(1,'#1a1a1a');ctx.fillStyle=kg;ctx.fill();ctx.strokeStyle='#333';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx+Math.cos(knobAngle)*22,cy+Math.sin(knobAngle)*22,5,0,Math.PI*2);ctx.fillStyle='#4488ff';ctx.fill();
+  ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(knobAngle)*20,cy+Math.sin(knobAngle)*20);ctx.strokeStyle='rgba(68,136,255,0.4)';ctx.lineWidth=2;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,6,0,Math.PI*2);ctx.fillStyle='#252525';ctx.fill();ctx.strokeStyle='#444';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx-4,cy);ctx.lineTo(cx+4,cy);ctx.strokeStyle='#555';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle='#333';ctx.font='10px Share Tech Mono';ctx.textAlign='center';
+  ctx.fillText('0°',cx+Math.cos(startA)*68,cy+Math.sin(startA)*68+4);
+  ctx.fillText('270°',cx+Math.cos(endA)*68,cy+Math.sin(endA)*68+4);
+  ctx.fillText('135°',cx,cy-68);
+}
+ 
+// ═══════════════════════════════════════════════════════
+// DHT GAUGE
+// ═══════════════════════════════════════════════════════
+function drawDHTGauge(temp,hum){
+  var canvas=document.getElementById('dht-canvas'),ctx=canvas.getContext('2d'),W=240,H=160;
+  ctx.clearRect(0,0,W,H);
+  drawGauge(ctx,65,90,55,temp,32,120,'#ff6644','°F');
+  drawGauge(ctx,175,90,55,hum,0,100,'#44aaff','%');
+}
+function drawGauge(ctx,cx,cy,r,value,min,max,color,unit){
+  var startA=Math.PI,endA=2*Math.PI,pct=Math.min(Math.max((value-min)/(max-min),0),1),valEnd=startA+pct*Math.PI;
+  ctx.beginPath();ctx.arc(cx,cy,r,startA,endA,false);ctx.strokeStyle='#1a1a1a';ctx.lineWidth=10;ctx.lineCap='round';ctx.stroke();
+  if(value>0){ctx.beginPath();ctx.arc(cx,cy,r,startA,valEnd,false);ctx.strokeStyle=color;ctx.lineWidth=10;ctx.lineCap='round';ctx.stroke();}
+  ctx.fillStyle='#e0e0e0';ctx.font='bold 22px Rajdhani,monospace';ctx.textAlign='center';ctx.fillText(value>0?value.toFixed(1):'--',cx,cy-10);
+  ctx.fillStyle='#555';ctx.font='11px Share Tech Mono';ctx.fillText(unit,cx,cy+8);
+  ctx.fillStyle='#333';ctx.font='9px Share Tech Mono';ctx.fillText(min,cx-r-2,cy+14);ctx.fillText(max,cx+r+2,cy+14);
+}
+function updateDHTGauge(){
+  var t=parseFloat(document.getElementById('tempVal').textContent)||0;
+  var h=parseFloat(document.getElementById('humVal').textContent)||0;
+  drawDHTGauge(t,h);
+}
+ 
+// ═══════════════════════════════════════════════════════
+// THREE.JS GLOBE
+// ═══════════════════════════════════════════════════════
 var scene,camera,renderer,earthMesh,surfaceGroup,issMarker,scMarker;
 var isDragging=false,prevMouse={x:0,y:0},rotVel={x:0,y:0};
-
-function ll2v(lat,lon,r){
-  var phi=(90-lat)*Math.PI/180,theta=(lon+180)*Math.PI/180;
-  return{x:-r*Math.sin(phi)*Math.cos(theta),y:r*Math.cos(phi),z:r*Math.sin(phi)*Math.sin(theta)};
-}
-function placeMarker(m,lat,lon){
-  var p=ll2v(lat,lon,1.06);m.position.set(p.x,p.y,p.z);
-  m.lookAt(new THREE.Vector3(0,0,0));m.rotateX(Math.PI/2);
-}
+function ll2v(lat,lon,r){var phi=(90-lat)*Math.PI/180,theta=(lon+180)*Math.PI/180;return{x:-r*Math.sin(phi)*Math.cos(theta),y:r*Math.cos(phi),z:r*Math.sin(phi)*Math.sin(theta)};}
+function placeMarker(m,lat,lon){var p=ll2v(lat,lon,1.06);m.position.set(p.x,p.y,p.z);m.lookAt(new THREE.Vector3(0,0,0));m.rotateX(Math.PI/2);}
 function updateISS(lat,lon){
   if(!issMarker||!earthMesh)return;
-  var p=ll2v(lat,lon,1.06);
-  var vec=new THREE.Vector3(p.x,p.y,p.z);
-  var matrix=new THREE.Matrix4();
-  matrix.makeRotationFromEuler(earthMesh.rotation);
-  vec.applyMatrix4(matrix);
-  issMarker.position.set(vec.x,vec.y,vec.z);
-  issMarker.lookAt(new THREE.Vector3(0,0,0));
-  issMarker.rotateX(Math.PI/2);
+  var p=ll2v(lat,lon,1.06),vec=new THREE.Vector3(p.x,p.y,p.z);
+  var matrix=new THREE.Matrix4();matrix.makeRotationFromEuler(earthMesh.rotation);vec.applyMatrix4(matrix);
+  issMarker.position.set(vec.x,vec.y,vec.z);issMarker.lookAt(new THREE.Vector3(0,0,0));issMarker.rotateX(Math.PI/2);
 }
-
 function initEarth(){
-  var container=document.getElementById('earth-container');
-  var W=container.clientWidth,H=380;
-  scene=new THREE.Scene();
-  camera=new THREE.PerspectiveCamera(45,W/H,0.1,1000);
-  renderer=new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(W,H);renderer.setClearColor(0x000008);
+  var container=document.getElementById('earth-container'),W=container.clientWidth,H=380;
+  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(45,W/H,0.1,1000);
+  renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(W,H);renderer.setClearColor(0x000008);
   container.appendChild(renderer.domElement);camera.position.z=2.5;
-
-  var sv=[];
-  for(var i=0;i<3000;i++)sv.push((Math.random()-0.5)*200,(Math.random()-0.5)*200,(Math.random()-0.5)*200);
-  var sg=new THREE.BufferGeometry();
-  sg.setAttribute('position',new THREE.Float32BufferAttribute(sv,3));
+  var sv=[];for(var i=0;i<3000;i++)sv.push((Math.random()-0.5)*200,(Math.random()-0.5)*200,(Math.random()-0.5)*200);
+  var sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.Float32BufferAttribute(sv,3));
   scene.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.12})));
-
   var tc=document.createElement('canvas');tc.width=2048;tc.height=1024;
-  var ctx=tc.getContext('2d');
-  ctx.fillStyle='#0a1a3a';ctx.fillRect(0,0,2048,1024);
+  var ctx=tc.getContext('2d');ctx.fillStyle='#0a1a3a';ctx.fillRect(0,0,2048,1024);
   ctx.strokeStyle='#0d2244';ctx.lineWidth=0.5;
   for(var x=0;x<=360;x+=30){ctx.beginPath();ctx.moveTo(x/360*2048,0);ctx.lineTo(x/360*2048,1024);ctx.stroke();}
   for(var y=0;y<=180;y+=30){ctx.beginPath();ctx.moveTo(0,y/180*1024);ctx.lineTo(2048,y/180*1024);ctx.stroke();}
   function px(lon,lat){return{x:(lon+180)/360*2048,y:(90-lat)/180*1024};}
-  function drawLand(pts,color,border){
-    ctx.fillStyle=color||'#1e5c30';ctx.strokeStyle=border||'#2a7a3a';ctx.lineWidth=1.5;
-    ctx.beginPath();
-    pts.forEach(function(p,i){var c=px(p[0],p[1]);i===0?ctx.moveTo(c.x,c.y):ctx.lineTo(c.x,c.y);});
-    ctx.closePath();ctx.fill();ctx.stroke();
-  }
+  function drawLand(pts,color,border){ctx.fillStyle=color||'#1e5c30';ctx.strokeStyle=border||'#2a7a3a';ctx.lineWidth=1.5;ctx.beginPath();pts.forEach(function(p,i){var c=px(p[0],p[1]);i===0?ctx.moveTo(c.x,c.y):ctx.lineTo(c.x,c.y);});ctx.closePath();ctx.fill();ctx.stroke();}
   drawLand([[-168,72],[-140,72],[-120,72],[-95,72],[-75,72],[-60,70],[-55,65],[-55,50],[-60,45],[-65,44],[-70,44],[-75,44],[-80,42],[-83,42],[-80,35],[-81,31],[-81,25],[-85,24],[-90,18],[-85,16],[-83,10],[-77,8],[-80,8],[-75,10],[-83,10],[-85,16],[-90,18],[-95,20],[-105,20],[-110,24],[-117,32],[-120,34],[-124,46],[-124,49],[-130,54],[-140,58],[-152,58],[-158,58],[-162,62],[-165,68],[-168,72]]);
   drawLand([[-45,84],[-20,84],[-18,78],[-20,72],[-28,68],[-45,60],[-52,65],[-52,72],[-45,84]]);
   drawLand([[-80,12],[-75,12],[-65,14],[-62,14],[-60,16],[-50,10],[-40,5],[-35,0],[-35,-5],[-38,-10],[-38,-15],[-40,-22],[-42,-22],[-44,-23],[-48,-28],[-50,-32],[-52,-34],[-58,-38],[-62,-42],[-66,-46],[-68,-52],[-72,-52],[-70,-44],[-76,-38],[-80,-30],[-80,-18],[-76,-10],[-78,-2],[-80,2],[-80,8],[-80,12]]);
@@ -621,69 +888,54 @@ function initEarth(){
   drawLand([[114,-22],[118,-20],[122,-18],[126,-14],[130,-12],[136,-12],[140,-16],[144,-18],[148,-18],[152,-22],[154,-26],[154,-32],[150,-36],[148,-38],[144,-38],[140,-38],[136,-36],[130,-34],[126,-34],[120,-34],[116,-32],[114,-26],[114,-22]]);
   drawLand([[166,-46],[168,-44],[170,-42],[172,-40],[172,-36],[170,-34],[168,-36],[166,-38],[166,-42],[166,-46]]);
   drawLand([[-180,-70],[0,-70],[180,-70],[180,-90],[-180,-90],[-180,-70]],'#c8dde8','#aabbcc');
-  ctx.fillStyle='rgba(0,102,255,0.9)';
-  var sc=px(-82,35);ctx.beginPath();ctx.arc(sc.x,sc.y,10,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(0,102,255,0.9)';var sc2=px(-82,35);ctx.beginPath();ctx.arc(sc2.x,sc2.y,10,0,Math.PI*2);ctx.fill();
   ctx.font='bold 20px sans-serif';ctx.fillStyle='rgba(255,255,255,0.45)';
-  [['N. America',-100,45],['S. America',-58,-15],['Europe',15,50],
-   ['Africa',20,5],['Asia',90,45],['Australia',135,-28]
+  [['N. America',-100,45],['S. America',-58,-15],['Europe',15,50],['Africa',20,5],['Asia',90,45],['Australia',135,-28]
   ].forEach(function(l){var p=px(l[1],l[2]);ctx.fillText(l[0],p.x-30,p.y);});
-
   var tex=new THREE.CanvasTexture(tc);
-  earthMesh=new THREE.Mesh(new THREE.SphereGeometry(1,64,64),
-    new THREE.MeshPhongMaterial({map:tex,specular:0x222244,shininess:20}));
+  earthMesh=new THREE.Mesh(new THREE.SphereGeometry(1,64,64),new THREE.MeshPhongMaterial({map:tex,specular:0x222244,shininess:20}));
   scene.add(earthMesh);
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.02,64,64),
-    new THREE.MeshPhongMaterial({color:0x2244aa,transparent:true,opacity:0.1,side:THREE.FrontSide})));
-  scene.add(new THREE.AmbientLight(0x334466,0.9));
-  var sun=new THREE.DirectionalLight(0xffeedd,1.3);sun.position.set(5,3,5);scene.add(sun);
-
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.02,64,64),new THREE.MeshPhongMaterial({color:0x2244aa,transparent:true,opacity:0.1,side:THREE.FrontSide})));
+  scene.add(new THREE.AmbientLight(0x334466,0.9));var sun=new THREE.DirectionalLight(0xffeedd,1.3);sun.position.set(5,3,5);scene.add(sun);
   surfaceGroup=new THREE.Group();earthMesh.add(surfaceGroup);
-  scMarker=new THREE.Mesh(new THREE.SphereGeometry(0.022,10,10),
-    new THREE.MeshBasicMaterial({color:0x0066ff}));
+  scMarker=new THREE.Mesh(new THREE.SphereGeometry(0.022,10,10),new THREE.MeshBasicMaterial({color:0x0066ff}));
   surfaceGroup.add(scMarker);placeMarker(scMarker,34.5,-82.0);
-
-  var op=[];
-  for(var i=0;i<=360;i++){
-    var lg=i-180,lt=51.6*Math.sin(i*Math.PI/180),p=ll2v(lt,lg,1.03);
-    op.push(new THREE.Vector3(p.x,p.y,p.z));
-  }
-  surfaceGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(op),
-    new THREE.LineBasicMaterial({color:0x00ff88,opacity:0.2,transparent:true})));
-
-  issMarker=new THREE.Mesh(new THREE.SphereGeometry(0.028,10,10),
-    new THREE.MeshBasicMaterial({color:0x00ff88}));
-  var ring=new THREE.Mesh(new THREE.RingGeometry(0.035,0.052,20),
-    new THREE.MeshBasicMaterial({color:0x00ff88,transparent:true,opacity:0.5,side:THREE.DoubleSide}));
+  var op=[];for(var i=0;i<=360;i++){var lg=i-180,lt=51.6*Math.sin(i*Math.PI/180),p=ll2v(lt,lg,1.03);op.push(new THREE.Vector3(p.x,p.y,p.z));}
+  surfaceGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(op),new THREE.LineBasicMaterial({color:0x00ff88,opacity:0.2,transparent:true})));
+  issMarker=new THREE.Mesh(new THREE.SphereGeometry(0.028,10,10),new THREE.MeshBasicMaterial({color:0x00ff88}));
+  var ring=new THREE.Mesh(new THREE.RingGeometry(0.035,0.052,20),new THREE.MeshBasicMaterial({color:0x00ff88,transparent:true,opacity:0.5,side:THREE.DoubleSide}));
   issMarker.add(ring);scene.add(issMarker);
-
   var el=renderer.domElement;
   el.addEventListener('mousedown',function(e){isDragging=true;prevMouse={x:e.clientX,y:e.clientY};rotVel={x:0,y:0};});
   el.addEventListener('mousemove',function(e){
-    if(!isDragging)return;
-    var dx=e.clientX-prevMouse.x,dy=e.clientY-prevMouse.y;
-    rotVel.y=dx*0.005;rotVel.x=dy*0.005;
-    earthMesh.rotation.y+=rotVel.y;earthMesh.rotation.x+=rotVel.x;
+    if(!isDragging)return;var dx=e.clientX-prevMouse.x,dy=e.clientY-prevMouse.y;
+    rotVel.y=dx*0.005;rotVel.x=dy*0.005;earthMesh.rotation.y+=rotVel.y;earthMesh.rotation.x+=rotVel.x;
     earthMesh.rotation.x=Math.max(-Math.PI/2,Math.min(Math.PI/2,earthMesh.rotation.x));
-    prevMouse={x:e.clientX,y:e.clientY};
-    updateISS(currentIssLat,currentIssLon);
+    prevMouse={x:e.clientX,y:e.clientY};updateISS(currentIssLat,currentIssLon);
   });
   el.addEventListener('mouseup',function(){isDragging=false;});
   el.addEventListener('mouseleave',function(){isDragging=false;});
   animate();
 }
-
 function animate(){
   requestAnimationFrame(animate);
-  if(!isDragging){
-    rotVel.y*=0.95;rotVel.x*=0.95;
-    earthMesh.rotation.y+=rotVel.y+0.0008;
-    updateISS(currentIssLat,currentIssLon);
-  }
+  if(!isDragging){rotVel.y*=0.95;rotVel.x*=0.95;earthMesh.rotation.y+=rotVel.y+0.0008;updateISS(currentIssLat,currentIssLon);}
   if(issMarker)issMarker.children[0].rotation.z+=0.02;
   renderer.render(scene,camera);
 }
-
-window.onload=function(){initEarth();};
+ 
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.onload=function(){
+  initEarth();
+  initColorWheel();
+  initServo();
+  drawPot(0);
+  drawDHTGauge(0,0);
+  resetAll();
+};
 </script>
 </body>
 </html>
+ 
