@@ -651,10 +651,17 @@ function resetAll(){
   document.getElementById('holiday-date').textContent='Connect to ESP32 to load...';
   document.getElementById('news-list').innerHTML='<div class="sub">Connect to ESP32 to load...</div>';
   document.getElementById('dow-price').textContent='--';
-  document.getElementById('dow-change').innerHTML='';
-  document.getElementById('dow-low').textContent='';
-  document.getElementById('dow-high').textContent='';
-  document.getElementById('dow-time-label').textContent='connect to load';
+document.getElementById('dow-change').innerHTML='';
+document.getElementById('dow-low').textContent='';
+document.getElementById('dow-high').textContent='';
+document.getElementById('dow-time-label').textContent='connect to load';
+// Clear the chart canvas
+var dc=document.getElementById('dowChart');
+var dctx=dc.getContext('2d');
+dctx.clearRect(0,0,dc.width,dc.height);
+// Reset data arrays
+dowVals=[];
+dowTimes=[];
   document.getElementById('nasa-title').textContent='Connect to ESP32 to load...';
   document.getElementById('nasa-img').style.display='none';
   document.getElementById('nasa-desc').textContent='';
