@@ -191,7 +191,7 @@
   </div>
  
   <div class="card" style="grid-column:1/-1;">
-    <h2>Dow Jones — Today <span id="dow-change" style="font-size:0.9em;margin-left:10px;"></span></h2>
+    <h2>Dow Jones — Last Five Days <span id="dow-change" style="font-size:0.9em;margin-left:10px;"></span></h2>
     <div id="dow-price" style="font-size:1.8em;color:#fff;font-weight:bold;margin-bottom:12px;">--</div>
     <canvas id="dowChart"></canvas>
     <div style="display:flex;justify-content:space-between;margin-top:6px;">
@@ -429,7 +429,7 @@ function fetchISS(){
 // ── Dow Jones — detailed graph ────────────────────────
 var dowVals=[],dowTimes=[],dowColor='#00ff88';
 function loadDow(){
-  var nowTs=Math.floor(Date.now()/1000),startTs=nowTs-(60*60*8);
+var nowTs=Math.floor(Date.now()/1000),startTs=nowTs-(60*60*24*5);
   fetch('https://finnhub.io/api/v1/stock/candle?symbol=DIA&resolution=5&from='+startTs+'&to='+nowTs+'&token='+FINNHUB_KEY)
     .then(r=>r.json()).then(d=>{
       if(!d.c||d.s==='no_data'||d.c.length<2){
@@ -492,20 +492,29 @@ function drawDowChart(){
   }
  
   // Vertical grid lines + X time labels (more lines)
-  var xLines=8;
-  for(var j=0;j<=xLines;j++){
-    var gx=LEFT+(j/xLines)*chartW;
-    ctx.strokeStyle=j%2===0?'#1e1e1e':'#141414';
-    ctx.lineWidth=0.5;
-    ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,chartH);ctx.stroke();
-    var idx2=Math.round((j/xLines)*(dowVals.length-1));
-    if(dowTimes[idx2]){
-      var t=new Date(dowTimes[idx2]*1000);
-      var lbl=t.getHours()+':'+(t.getMinutes()<10?'0':'')+t.getMinutes();
-      ctx.fillStyle='#444';ctx.font='10px Share Tech Mono';ctx.textAlign='center';
-      ctx.fillText(lbl,gx,H-8);
-    }
+  var xLines=24;
+var timeStart = dowTimes[0]*1000;
+var timeEnd   = dowTimes[dowTimes.length-1]*1000;
+var timeRange = timeEnd - timeStart;
+
+for(var j=0;j<=xLines;j++){
+  var gx=LEFT+(j/xLines)*chartW;
+  ctx.strokeStyle=j%2===0?'#1e1e1e':'#141414';
+  ctx.lineWidth=j%4===0?0.8:0.4;
+  ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,chartH);ctx.stroke();
+
+  // Generate time label by interpolating across the actual time range
+  if(j%2===0){
+    var labelTime = new Date(timeStart + (j/xLines)*timeRange);
+    var lh = labelTime.getHours();
+    var lm = labelTime.getMinutes();
+    var ampm = lh>=12?'pm':'am';
+    lh = lh%12; if(lh===0)lh=12;
+    var lbl = lh+':'+(lm<10?'0':'')+lm+ampm;
+    ctx.fillStyle='#444';ctx.font='10px Share Tech Mono';ctx.textAlign='center';
+    ctx.fillText(lbl,gx,H-8);
   }
+}
  
   // Zero line if visible
   if(dowVals.length>0){
@@ -559,7 +568,13 @@ function drawDowChart(){
     ctx.fillStyle='#1a1a1a';ctx.strokeStyle='#444';ctx.lineWidth=1;
     ctx.beginPath();ctx.roundRect(tx,ty,tw,22,4);ctx.fill();ctx.stroke();
     ctx.fillStyle='#fff';ctx.fillText(tip,tx+8,ty+15);
-    if(dowTimes[idx3]){var t2=new Date(dowTimes[idx3]*1000);document.getElementById('dow-time-label').textContent=t2.getHours()+':'+(t2.getMinutes()<10?'0':'')+t2.getMinutes();}
+    if(dowTimes[idx3]){
+  var t2=new Date(dowTimes[idx3]*1000);
+  var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  document.getElementById('dow-time-label').textContent=
+    days[t2.getDay()]+' '+
+    t2.getHours()+':'+(t2.getMinutes()<10?'0':'')+t2.getMinutes();
+}
   };
   canvas.onmouseleave=function(){drawDowChart();document.getElementById('dow-time-label').textContent='hover for price';};
 }
@@ -812,8 +827,16 @@ function drawServo(angle){
 function initServo(){
   drawServo(90);
   var canvas=document.getElementById('servoCanvas'),cx=120,cy=130;
-  function getAngle(x,y){var dx=x-cx,dy=y-(cy-30),a=Math.atan2(dy,dx),deg=Math.round((a+Math.PI)/Math.PI*180);return Math.max(0,Math.min(180,deg));}
-  canvas.addEventListener('mousedown',function(e){if(document.getElementById('lock-servo').style.display==='none')servoDragging=true;});
+function getAngle(x,y){
+  var dx=x-cx, dy=y-(cy-30);
+  // atan2 returns -PI to PI, we want 0=left, 90=up, 180=right
+  var a = Math.atan2(dy,dx);
+  var deg = Math.round((a/Math.PI)*180);
+  // shift so 0 is at left (-180 becomes 0, 0 becomes 90, 180 stays 180... wait)
+  // simpler: just use the bottom half arc
+  deg = Math.round(((a + Math.PI) / Math.PI) * 180);
+  return Math.max(0, Math.min(180, deg));
+}  canvas.addEventListener('mousedown',function(e){if(document.getElementById('lock-servo').style.display==='none')servoDragging=true;});
   canvas.addEventListener('mousemove',function(e){if(!servoDragging)return;var r=canvas.getBoundingClientRect(),angle=getAngle(e.clientX-r.left,e.clientY-r.top);document.getElementById('servoAngle').textContent=angle;drawServo(angle);sendCmd('SERVO:'+angle);});
   canvas.addEventListener('mouseup',function(){servoDragging=false;});canvas.addEventListener('mouseleave',function(){servoDragging=false;});
   canvas.addEventListener('touchstart',function(e){e.preventDefault();if(document.getElementById('lock-servo').style.display==='none')servoDragging=true;});
