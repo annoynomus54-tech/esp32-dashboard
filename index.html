@@ -709,30 +709,52 @@ dowTimes=[];
  
 // ── BLE ───────────────────────────────────────────────
 let device,characteristic,currentLine='';
-async function connect(){
-  try{
-    document.getElementById('connectBtn').textContent='Scanning...';
-    device=await navigator.bluetooth.requestDevice({filters:[{name:'ESP32-Dashboard'}],optionalServices:[SERVICE_UUID]});
-    device.addEventListener('gattserverdisconnected',onDisconnected);
-    const server=await device.gatt.connect();
-    const service=await server.getPrimaryService(SERVICE_UUID);
-    characteristic=await service.getCharacteristic(CHARACTERISTIC_UUID);
-    await characteristic.startNotifications();
-    characteristic.addEventListener('characteristicvaluechanged',onData);
-    document.getElementById('dot').classList.add('on');
-    document.getElementById('status-text').textContent='CONNECTED';
-    document.getElementById('connectBtn').disabled=true;
-    document.getElementById('disconnectBtn').disabled=false;
-    document.getElementById('connectBtn').textContent='Connect';
-    // Hide all locks
-    ['time','moon','iss','rgb','servo','pot','dht'].forEach(function(id){
-      var el=document.getElementById('lock-'+id);if(el)el.style.display='none';
+  
+  async function connect() {
+  try {
+    document.getElementById('connectBtn').textContent = 'Scanning...';
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'ESP32-Dashboard' }],
+      optionalServices: [SERVICE_UUID]
     });
+    document.getElementById('connectBtn').textContent = 'Connecting...';
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    const server  = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE_UUID);
+    characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+    await characteristic.startNotifications();
+    characteristic.addEventListener('characteristicvaluechanged', onData);
+    setConnectedState(true);
     loadAllData();
-  }catch(e){
-    document.getElementById('connectBtn').textContent='Connect';
-    alert('Connection failed: '+e);
+  } catch(e) {
+    document.getElementById('connectBtn').textContent = 'Connect';
+    document.getElementById('connectBtn').disabled = false;
+    if (!e.toString().includes('cancelled')) {
+      alert('Connection failed: ' + e);
+    }
   }
+}
+
+function setConnectedState(yes) {
+  document.getElementById('dot').classList.toggle('on', yes);
+  document.getElementById('status-text').textContent = yes ? 'CONNECTED' : 'NOT CONNECTED';
+  document.getElementById('connectBtn').disabled = yes;
+  document.getElementById('disconnectBtn').disabled = !yes;
+  document.getElementById('connectBtn').textContent = 'Connect';
+  ['time','moon','iss','rgb','servo','pot','dht'].forEach(function(id) {
+    var el = document.getElementById('lock-' + id);
+    if (el) el.style.display = yes ? 'none' : 'flex';
+  });
+}
+
+function onDisconnected() {
+  setConnectedState(false);
+  resetAll();
+  document.getElementById('status-text').textContent = 'DISCONNECTED';
+}
+
+function disconnect() {
+  if (device) device.gatt.disconnect();
 }
 function onData(e){
   const chunk=new TextDecoder().decode(e.target.value);
